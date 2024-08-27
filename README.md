@@ -66,3 +66,4 @@ By using the **icp** option, a random roto-translation will be applied to both t
 - **spatial_transformer.py :** Subclass of ```nn.Module``` which implements the module defined in [DGCNN](https://arxiv.org/abs/1801.07829) to learn a rote-translation in order to align input data.
 - **DataLoader.py :**  ```FaceLandmarkDataset``` class.
 - **main.py :** Example of usage of the DataLoader ```FaceLandmarkDataset```
+
