@@ -1,0 +1,4 @@
+__pycache__
+.DS_Store
+Preprocessing/reference_pointclouds_for_icp/Facescape_Neutral_reference_pointcloud_icp.pt
+Facescape/*
