@@ -3,6 +3,8 @@ from torch import nn
 from se3.fibers import Fiber
 from se3.modules import get_basis_and_r, GSE3Res, GNormBias
 
+import dgl
+from se3.utils.wrappers import Pooling3D, Upsampling3D
 
 class SE3Transformer(nn.Module):
     """SE(3) equivariant GCN with attention"""
@@ -30,31 +32,10 @@ class SE3Transformer(nn.Module):
         self.n_heads = n_heads
         self.si_m, self.si_e = si_m, si_e
         self.x_ij = x_ij
-        
-
-
-        #print(f"({self.num_degrees}, {self.num_channels}) ->", Fiber(self.num_degrees, self.num_channels))
-        #print(Fiber(dictionary={1: self.num_channels}))
-        #print(Fiber(1, self.num_channels))
-        #print(Fiber(self.num_channels, 1))
 
         self.fibers = {'in': Fiber(dictionary={1: 1}),
                        'mid': Fiber(self.num_degrees, self.num_channels),
                        'out': Fiber(dictionary={1: 1})}
-        
-        # self.fibers = {'in': Fiber(1, 3),
-        #                'mid': Fiber(self.num_degrees, self.num_channels),
-        #                'out': Fiber(dictionary={1: 1})}
-
-        # self.fibers ={
-        #     'in': Fiber(1, 3),
-        #     'mid': Fiber(self.num_degrees, self.num_channels),
-        #     'out': Fiber(1, self.num_degrees*self.num_channels)
-        # }
-
-        #self.fibers = fib
-
-        print(self.fibers)
 
         self.Gblock = self._build_gcn(self.fibers)
 
@@ -81,11 +62,6 @@ class SE3Transformer(nn.Module):
             h_enc = layer(h_enc, G=G, r=r, basis=basis)
 
         return h_enc['1']
-    
-
-#class SE3UPointnet:
-
-
 
 class SE3ConvBlock(nn.Module):
 
@@ -94,8 +70,6 @@ class SE3ConvBlock(nn.Module):
             f_in: Fiber,
             f_out: Fiber,
             num_layers: int,
-            #num_channels: int,
-            #num_degrees: int = 4,
             div: float = 1,
             n_heads: int = 1,
             selfint ='att',
@@ -115,8 +89,6 @@ class SE3ConvBlock(nn.Module):
         self.f_in = f_in
         self.f_out = f_out
         self.num_layers = num_layers
-        #self.num_channels = num_channels
-        #self.num_degrees = num_degrees
         self.edge_dim = 1
         self.div = div
         self.n_heads = n_heads
@@ -147,5 +119,110 @@ class SE3ConvBlock(nn.Module):
             h_enc = layer(h_enc, G=G, r=r, basis=basis)
 
         return h_enc['1']
+    
+
+class SE3UPointnet(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.conv1 = SE3ConvBlock(
+            f_in= Fiber(dictionary={1: 1}),
+            f_out= Fiber(4, 2),
+            num_layers=2,
+            n_heads=1,
+            selfint='att'
+        )
+        self.pooling1 = Pooling3D(
+            in_features=3,
+            pooling_ratio=0.2,
+            aggr='max'
+        )
+
+
+        self.conv2 = SE3ConvBlock(
+            f_in= Fiber(dictionary={1: 2}),
+            f_out= Fiber(4, 4),
+            num_layers=2,
+            n_heads=1,
+            selfint='att'
+        )
+        self.pooling2 = Pooling3D(
+            in_features=3,
+            pooling_ratio=0.2,
+            aggr='max'
+        )
+        
+
+        self.conv3 = SE3ConvBlock(
+            f_in= Fiber(dictionary={1: 4}),
+            f_out= Fiber(4, 8),
+            num_layers=2,
+            n_heads=1,
+            selfint='att'
+        )
+        self.pooling3 = Pooling3D(
+            in_features=3,
+            pooling_ratio=0.2,
+            aggr='max'
+        )
+      
+        self.conv4 = SE3ConvBlock(
+            f_in= Fiber(dictionary={1: 8}),
+            f_out= Fiber(4, 16),
+            num_layers=2,
+            n_heads=1,
+            selfint='att'
+        )
+        self.pooling4 = Pooling3D(
+            in_features=3,
+            pooling_ratio=0.2,
+            aggr='max'
+        )
+
+
+        self.conv5 = SE3ConvBlock(
+            f_in= Fiber(dictionary={1: 16}),
+            f_out= Fiber(4, 32),
+            num_layers=2,
+            n_heads=1,
+            selfint='att'
+        )
+        self.pooling5 = Pooling3D(
+            in_features=3,
+            pooling_ratio=0.2,
+            aggr='max'
+        )
+       
+       
+
+        self.upsampler = Upsampling3D(
+            in_features=3,
+            power=2
+        )
+
+    def forward(self, G: dgl.graph, features: str, batch_size: int=1):
+        G.ndata[features] = self.conv1(G)
+        G_pooled1, G_level_structure1, fp_idx1 = self.pooling1(G, features, batch_size)
+
+        G_pooled1.ndata[features] = self.conv2(G_pooled1)
+        G_pooled2, G_level_structure2, fp_idx2 = self.pooling2(G_pooled1, features, batch_size)
+
+        G_pooled2.ndata[features] = self.conv3(G_pooled2)
+        G_pooled3, G_level_structure3, fp_idx3 = self.pooling3(G_pooled2, features, batch_size)
+
+        G_pooled3.ndata[features] = self.conv4(G_pooled3)
+        G_pooled4, G_level_structure4, fp_idx4 = self.pooling4(G_pooled3, features, batch_size)
+
+        
+
+        G_upsampled4 = self.upsampler(G_pooled4, features, G_level_structure4, fp_idx4)
+        G_upsampled3 = self.upsampler(G_upsampled4, features, G_level_structure3, fp_idx3)
+        G_upsampled2 = self.upsampler(G_upsampled3, features, G_level_structure2, fp_idx2)
+        G_upsampled1 = self.upsampler(G_upsampled2, features, G_level_structure1, fp_idx1)
+
+        
+
+        return G_upsampled1
+
 
 
