@@ -119,110 +119,143 @@ class SE3ConvBlock(nn.Module):
             h_enc = layer(h_enc, G=G, r=r, basis=basis)
 
         return h_enc['1']
-    
 
-class SE3UPointnet(nn.Module):
 
-    def __init__(self):
+class SE3Unet(nn.Module):
+
+    def __init__(
+            self,
+            n_layers: int,
+            si_m: str,
+            si_e: str,
+            in_features: int,
+            hidden_channels: int,
+            out_features: int,
+            pooling_ratio: float,
+            aggr: str
+        ):
         super().__init__()
-        self.conv1 = SE3ConvBlock(
-            f_in= Fiber(dictionary={1: 1}),
-            f_out= Fiber(4, 2),
-            num_layers=2,
-            n_heads=1,
-            selfint='att'
-        )
-        self.pooling1 = Pooling3D(
-            in_features=3,
-            pooling_ratio=0.2,
-            aggr='max'
-        )
+        self.n_layers = n_layers
+        self.si_m = si_m
+        self.si_e = si_e
+        self.in_features = in_features
+        self.hidden_channels = hidden_channels
+        self.out_features = out_features
+        self.pooling_ratio = pooling_ratio
+        self.aggr = aggr
+
+        self.down_branch, self.bottleneck, self.up_branch, self.mlp = self._build_unet(n_layers)
 
 
-        self.conv2 = SE3ConvBlock(
-            f_in= Fiber(dictionary={1: 2}),
-            f_out= Fiber(4, 4),
+    def _build_unet(self, n_layers):
+        down_branch = []
+        in_channels = 1
+        out_channels = self.hidden_channels
+
+        for _ in range(n_layers):
+            down_branch.append(
+                SE3ConvBlock(
+                    f_in=Fiber(dictionary={1: in_channels}),
+                    f_out=Fiber(3, out_channels),
+                    num_layers=2,
+                    n_heads=1,
+                    selfint=self.si_m
+                )
+            )
+            down_branch.append(
+                Pooling3D(
+                    in_features=self.in_features,
+                    pooling_ratio=self.pooling_ratio,
+                    aggr=self.aggr
+                )
+            )
+
+            in_channels = out_channels
+            #out_channels = in_channels*2
+        
+        #out_channels = in_channels
+        bottleneck =  SE3ConvBlock(
+            f_in=Fiber(dictionary={1: in_channels}),
+            f_out=Fiber(3, out_channels),
             num_layers=2,
             n_heads=1,
-            selfint='att'
+            selfint=self.si_m
         )
-        self.pooling2 = Pooling3D(
-            in_features=3,
-            pooling_ratio=0.2,
-            aggr='max'
+
+        up_branch = []
+        #out_channels = out_channels//2
+        
+        for _ in range(n_layers-1):
+            up_branch.append(
+                Upsampling3D(
+                    in_features=self.in_features,
+                    power=2
+                )
+            )
+            up_branch.append(
+                SE3ConvBlock(
+                    f_in=Fiber(dictionary={1: in_channels}),
+                    f_out=Fiber(3, out_channels),
+                    num_layers=2,
+                    n_heads=1,
+                    selfint=self.si_m
+                )
+            )
+            
+            #in_channels = out_channels
+            #out_channels = out_channels//2
+
+        up_branch.append(
+            Upsampling3D(
+                in_features=self.in_features,
+                power=2
+            )
+        )
+        up_branch.append(
+            SE3ConvBlock(
+                f_in=Fiber(dictionary={1: in_channels}),
+                f_out=Fiber(3, 1),
+                num_layers=2,
+                n_heads=1,
+                selfint=self.si_e
+            )
+        )
+
+        mlp = nn.Sequential(
+            nn.Linear(in_features=self.in_features, out_features=self.out_features),
+            nn.ReLU(),
+            nn.Linear(in_features=self.out_features, out_features=self.out_features),
         )
         
-
-        self.conv3 = SE3ConvBlock(
-            f_in= Fiber(dictionary={1: 4}),
-            f_out= Fiber(4, 8),
-            num_layers=2,
-            n_heads=1,
-            selfint='att'
-        )
-        self.pooling3 = Pooling3D(
-            in_features=3,
-            pooling_ratio=0.2,
-            aggr='max'
-        )
-      
-        self.conv4 = SE3ConvBlock(
-            f_in= Fiber(dictionary={1: 8}),
-            f_out= Fiber(4, 16),
-            num_layers=2,
-            n_heads=1,
-            selfint='att'
-        )
-        self.pooling4 = Pooling3D(
-            in_features=3,
-            pooling_ratio=0.2,
-            aggr='max'
-        )
-
-
-        self.conv5 = SE3ConvBlock(
-            f_in= Fiber(dictionary={1: 16}),
-            f_out= Fiber(4, 32),
-            num_layers=2,
-            n_heads=1,
-            selfint='att'
-        )
-        self.pooling5 = Pooling3D(
-            in_features=3,
-            pooling_ratio=0.2,
-            aggr='max'
-        )
-       
-       
-
-        self.upsampler = Upsampling3D(
-            in_features=3,
-            power=2
-        )
-
+        return nn.ModuleList(down_branch), bottleneck, nn.ModuleList(up_branch), mlp
+    
     def forward(self, G: dgl.graph, features: str, batch_size: int=1):
-        G.ndata[features] = self.conv1(G)
-        G_pooled1, G_level_structure1, fp_idx1 = self.pooling1(G, features, batch_size)
+        res = []
 
-        G_pooled1.ndata[features] = self.conv2(G_pooled1)
-        G_pooled2, G_level_structure2, fp_idx2 = self.pooling2(G_pooled1, features, batch_size)
+        for i in range(0, self.n_layers*2, 2):
+            G.ndata[features] = self.down_branch[i](G)
 
-        G_pooled2.ndata[features] = self.conv3(G_pooled2)
-        G_pooled3, G_level_structure3, fp_idx3 = self.pooling3(G_pooled2, features, batch_size)
+            G_pooled, G_level_structure, fp_idx = self.down_branch[i+1](G, features, batch_size)
+            res.append((G, G_level_structure, fp_idx))
 
-        G_pooled3.ndata[features] = self.conv4(G_pooled3)
-        G_pooled4, G_level_structure4, fp_idx4 = self.pooling4(G_pooled3, features, batch_size)
+            G = G_pooled
 
-        
+        G.ndata[features] = self.bottleneck(G)
 
-        G_upsampled4 = self.upsampler(G_pooled4, features, G_level_structure4, fp_idx4)
-        G_upsampled3 = self.upsampler(G_upsampled4, features, G_level_structure3, fp_idx3)
-        G_upsampled2 = self.upsampler(G_upsampled3, features, G_level_structure2, fp_idx2)
-        G_upsampled1 = self.upsampler(G_upsampled2, features, G_level_structure1, fp_idx1)
+        res_idx = -1
+        for i in range(0, self.n_layers*2, 2):
+            G_res, G_level_structure, fp_idx = res[res_idx]
 
-        
+            G_upsmapled = self.up_branch[i](G, features, G_level_structure, fp_idx)
 
-        return G_upsampled1
+            G_upsmapled.ndata[features] = G_res.ndata[features] + G_upsmapled.ndata[features]
 
+            G_upsmapled.ndata[features] = self.up_branch[i+1](G_upsmapled)
 
+            G = G_upsmapled
+            res_idx = res_idx - 1
 
+        x = G.ndata[features].view(-1, G.ndata[features].size(0) // batch_size, self.in_features)
+        y_hat = self.mlp(x)
+
+        return y_hat

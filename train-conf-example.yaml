@@ -1,0 +1,50 @@
+wandb:
+  api: "-"
+  project: "SE3-Transformer"
+  run_name: "SE3-unet-v0.0.0.1"
+
+train_set:
+  preprocessing: "none"                         #choices=['icp', 'spatial_transformer', 'none']
+  break_ds_with: "none"                         #choices=['rotation', 'translation', 'rotation_translation', 'none']
+  split: "Train"
+  ds_path: "./Facescape"
+  category: "Neutral"
+  references_pointclouds_icp_path: "./Preprocessing/reference_pointclouds_for_icp"
+  reduce_pointcloud_to: 2048
+
+test_set:
+  preprocessing: "none"                         #choices=['icp', 'spatial_transformer', 'none']
+  break_ds_with: "none"                         #choices=['rotation', 'translation', 'rotation_translation', 'none']
+  split: "Test"
+  ds_path: "./Facescape"
+  category: "Neutral"
+  references_pointclouds_icp_path: "./Preprocessing/reference_pointclouds_for_icp"
+  reduce_pointcloud_to: 2048
+
+model:
+  #name: "SE3Unet"
+  n_layers: 4
+  si_m: "att"
+  si_e: "1x1"
+  in_features: 3
+  hidden_channels: 5  # ref paper 5
+  out_features: 68
+  pooling_ratio: 0.1
+  aggr: "max"
+
+hyper:
+  epochs: 3
+  learning_rate: 0.01
+  batch_training_size: 5
+  batch_eval_size: 5
+  device: "cuda"
+  gradient_accumulation_steps: 1
+  logging_steps: 5
+  checkpoint_dir: "checkpoints"
+  save_every: 1
+  save_max: 3
+  optimizer: "SGD"
+  optimizer_kwargs: 
+    momentum: 0.9
+  scheduler: "CosineAnelingLr"
+  features: "v"

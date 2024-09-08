@@ -10,6 +10,7 @@ from Preprocessing.augmentation import augmentation
 from Preprocessing.procrustes_icp import batch_icp
 
 import dgl
+from dgl.geometry import farthest_point_sampler
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -21,7 +22,8 @@ class FaceLandmarkDataset(Dataset):
             ds_path,
             split,
             category,
-            references_pointclouds_icp_path
+            references_pointclouds_icp_path,
+            reduce_pointcloud_to: int=None
         ):
         print("Loading dataset...")
 
@@ -31,6 +33,7 @@ class FaceLandmarkDataset(Dataset):
         self.ds_path = os.path.join(ds_path, split, f"{split.lower()}_neutral.npy")
         self.ds_name = self.ds_path.split("/")[1]
         self.category = category
+        self.reduce_pointcloud_to = reduce_pointcloud_to
         
         self.faces, self.landmark_gts, self.heatmaps, self.scales = self.load_face_data()
             
@@ -76,16 +79,44 @@ class FaceLandmarkDataset(Dataset):
             print("Emotion: ", set(emotions))
         
         return torch.tensor(faces,  dtype=torch.float32), torch.tensor(landmark_gts,  dtype=torch.float32), torch.tensor(heatmaps,  dtype=torch.float32), torch.tensor(scales,  dtype=torch.float32)
+    
+    
+    def _reduce(self, n_points: int, point_cloud: torch.tensor,landmarks: torch.tensor, sigma: float=0.08):
+        #original_dim = point_cloud.dim()
+        if point_cloud.dim() == 2:
+            point_cloud = torch.unsqueeze(point_cloud, dim=0)
+            landmarks = torch.unsqueeze(landmarks, dim=0)
+
+        point_idxs = farthest_point_sampler(point_cloud, n_points)
+        dim0_index = torch.arange(point_cloud.shape[0]).unsqueeze(-1)
+
+        point_cloud = point_cloud[dim0_index, point_idxs]
+
+        sqrd_distances = torch.sum((point_cloud[:, :, None, :] - landmarks[:, None, :, :])**2, dim=-1)
+        heatmap = torch.exp(- sqrd_distances / (2 * sigma ** 2))
+
+        # if point_cloud.dim() != original_dim:
+        #     point_cloud = torch.squeeze(point_cloud, dim=0)
+        #     heatmap = torch.squeeze(heatmap, dim=0)
+
+        return point_cloud, heatmap
 
     def __getitem__(self, item):
-        face = self.faces[item]
+        
         #landmark = self.landmark_gts[item]
-        heatmap = self.heatmaps[item]
         #scale = self.scales[item]
 
-        #knn_g = dgl.knn_graph(self.faces[item], k=10, algorithm='kd-tree', exclude_self=True)
+        if self.reduce_pointcloud_to is not None:
+            face, heatmap = self._reduce(
+                n_points=self.reduce_pointcloud_to,
+                point_cloud=self.faces[item],
+                landmarks=self.landmark_gts[item]
+            )
+        else:
+            face = self.faces[item]
+            heatmap = self.heatmaps[item] if self.heatmaps[item].dim() == 3 else torch.unsqueeze(self.heatmaps[item], dim=0)
+
         knn_g = dgl.knn_graph(face, k=40, algorithm='kd-tree', exclude_self=True)
-        knn_g.k = 10
         
         indices_src, indices_dst = knn_g.edges()
  
@@ -96,7 +127,6 @@ class FaceLandmarkDataset(Dataset):
         knn_g.edata['w'] = torch.sqrt(torch.sum(knn_g.edata['d']**2, dim=-1, keepdim=True))
 
         return knn_g, heatmap
-        #return {'face': face, 'landmark': landmark, 'heatmap':heatmap, 'scale':scale}
 
     def __len__(self):
         return self.faces.shape[0]

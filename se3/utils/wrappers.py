@@ -107,6 +107,8 @@ class Pooling3D(nn.Module):
 
 
     def forward(self, G: dgl.graph, features: str, batch_size: int=1):
+        device = G.device
+
         n_points = G.ndata['x'].size(0) // batch_size
         self.downsampled_points = round(n_points * (1 - self.pooling_ratio))
 
@@ -117,7 +119,7 @@ class Pooling3D(nn.Module):
             self.downsampled_points 
         )
 
-        starting_idx = (torch.arange(pos.size(0)) * n_points).view(-1, 1)
+        starting_idx = (torch.arange(pos.size(0), device=device) * n_points).view(-1, 1)
         fp_idx = (starting_idx + fp_idx).flatten()
 
         subgraphs = dgl.node_subgraph(G, fp_idx)
@@ -138,13 +140,13 @@ class Pooling3D(nn.Module):
         subgraphs.edata['w'] = torch.sqrt(torch.sum(subgraphs.edata['d']**2, dim=-1, keepdim=True))
 
         
-        G_level_structure = dgl.graph(G.edges())
+        G_level_structure = dgl.graph(G.edges(), device=device)
         G_level_structure.ndata['x'] = G.ndata['x']
         G_level_structure.edata['d'] = G.edata['d']
         G_level_structure.edata['w'] = G.edata['w']
 
         return subgraphs, G_level_structure, fp_idx
-
+    
 class Upsampling3D(nn.Module):
     '''
     The Upsampling3D class implements IDW (Inverse Distance Weighting) to upsample the given point cloud (as a DGL graph) to the original resolution
@@ -156,42 +158,47 @@ class Upsampling3D(nn.Module):
         self.in_features = in_features
         self.power = power
 
-    def forward(self, G: dgl.DGLGraph, features: str, G_level_structure: dgl.DGLGraph, fp_idx: torch.Tensor):
-        
-        # Initialize the feature tensor for the original point cloud resolution
-        _, in_channels, in_features = G.ndata[features].shape
-        nodes_feature = torch.zeros(G_level_structure.ndata['x'].size(0), in_channels, in_features)
+    def forward(self, source_graph: dgl.DGLGraph, features: str, target_graph: dgl.DGLGraph, fp_idx: torch.Tensor):
+        device = source_graph.device
+
+        _, in_channels, in_features = source_graph.ndata[features].shape
+        nodes_feature = torch.zeros(target_graph.ndata['x'].size(0), in_channels, in_features, device=device)
 
         # Assign known features at the provided indices
-        nodes_feature[fp_idx, :] = G.ndata[features]  # No need to squeeze here as we assume multi-channel features
-        
+        nodes_feature[fp_idx, :] = source_graph.ndata[features]
+
         # Identify nodes where features must be estimated
-        nodes = G_level_structure.nodes()
+        nodes = target_graph.nodes().to(device)
         nodes_idx = nodes[~torch.isin(nodes, fp_idx)]
         
         # Get the neighborhoods of the nodes of interest
-        srcs, dsts = G_level_structure.in_edges(nodes_idx)
+        srcs, dsts = target_graph.in_edges(nodes_idx)
 
-        # Masking features to estimate
-        feature_mask = torch.any(nodes_feature[srcs] == 0, dim=-1)
-
-        # Computing weights and weighted features
-        weights = 1 / torch.pow(G_level_structure.edata['w'][srcs], self.power)
+        srcs = srcs.to(device)
+        dsts = dsts.to(device)
+        
+        # Compute weights, taking care of avoiding zero division
+        weights = 1 / torch.pow(target_graph.edata['w'][srcs] + 1e-10, self.power).to(device)
         weights = torch.repeat_interleave(weights, in_channels, dim=-1).view(-1, in_channels, 1)
-        weights[feature_mask] = 0
-      
-        weighted_features = nodes_feature[srcs] * weights
 
-        # Construct neighborhoods index
-        _, neighborhood_sizes = torch.unique(dsts, return_counts=True)
-        neighborhood_idx = torch.cat([torch.tensor([0]), torch.cumsum(neighborhood_sizes, dim=0)])
+        # Masking unknown features
+        feature_mask = torch.any(nodes_feature[srcs] != 0, dim=-1, keepdim=True)
+        
+        # Apply the feature mask to ignore weights for unknown features
+        weights *= feature_mask.float()
 
-        # Estimate node features for each node
-        for i, node_id in enumerate(nodes_idx):
-            norm = weights[neighborhood_idx[i]:neighborhood_idx[i+1]].sum(dim=0)
-            nodes_feature[node_id] = weighted_features[neighborhood_idx[i]:neighborhood_idx[i+1]].sum(dim=0) / norm
-        
-        
+        # Initialize accumulators
+        weighted_features = torch.zeros_like(nodes_feature)
+        weights_sum = torch.zeros(target_graph.num_nodes(), in_channels, 1, device=device)
+
+        # Accumulate weighted features and weights for each destination node
+        weighted_features.index_add_(0, dsts, nodes_feature[srcs] * weights)
+        weights_sum.index_add_(0, dsts, weights)
+
+        # Normalize by the sum of weights, taking care of potential zero division
+        nodes_feature[nodes_idx] = weighted_features[nodes_idx] / weights_sum[nodes_idx].clamp(min=1e-10)
+
+
         # non optimized code
         # for node_id in nodes_idx:
         #     neighborhood = G_level_structure.in_edges(node_id)[0]
@@ -201,8 +208,8 @@ class Upsampling3D(nn.Module):
         #     node_features = nodes_feature[neighborhood] * weights
         #     nodes_feature[node_id] = node_features.sum(dim=0) / weights.sum()
 
-        
+
         # Update the node features in the graph with the estimated values
-        G_level_structure.ndata[features] = nodes_feature
+        target_graph.ndata[features] = nodes_feature
         
-        return G_level_structure
+        return target_graph
