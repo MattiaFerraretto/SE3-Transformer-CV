@@ -5,7 +5,6 @@ import numpy as np
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
 
-from configuration import *
 from Preprocessing.augmentation import augmentation
 from Preprocessing.procrustes_icp import batch_icp
 

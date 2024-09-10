@@ -6,20 +6,27 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 import wandb
 import os
 from tqdm import tqdm
+from tqdm import trange
 
 def eval_loop(model: nn.Module, eval_set: Dataset, criterion: nn.BCEWithLogitsLoss, device, features, batch_size):
     model.eval()
     total_loss = 0.0
 
     with torch.no_grad():
-        for pointclouds, y in eval_set:
+        for i in trange(0, len(eval_set), batch_size, desc="Evaluating.."):
+            pointclouds, y = eval_set[i : i + batch_size]
             
             y_hat = model(
                 pointclouds.to(device),
                 features,
                 batch_size
             )
-            loss = criterion(y_hat, y)
+            
+            loss = criterion(
+                y_hat,
+                y.to(device)
+            )
+            
             total_loss += loss.item()
 
     return total_loss / len(eval_set)
@@ -55,14 +62,14 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
     optimizer = Adam(model.parameters(), lr=config['learning_rate'])
     criterion = nn.BCEWithLogitsLoss()
 
-    scheduler = CosineAnnealingLR(optimizer, config['epochs'], eta_min=0.001)
+    scheduler = CosineAnnealingLR(optimizer, config['epochs'], eta_min=1e-6)
 
     for epoch in range(config['epochs']):
         model.train()
         running_loss = 0.0
 
-        for i, entry in enumerate(tqdm(train_set, desc=f"Epoch {epoch+1}/{config['epochs']}")):
-            pointclouds, y = entry[0], entry[1]
+        for i in trange(0, len(train_set), config['batch_training_size'],  desc=f"Epoch {epoch+1}/{config['epochs']}"):
+            pointclouds, y = train_set[i : i + config['batch_training_size']]
 
             y_hat = model(
                 pointclouds.to(config['device']),
@@ -89,7 +96,7 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
                 wandb.log({
                     "train_loss": loss.item() * config['gradient_accumulation_steps']
                 })
-
+        
         if (i + 1) % config['gradient_accumulation_steps'] != 0:
             optimizer.step()
             optimizer.zero_grad()
