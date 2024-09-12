@@ -1,11 +1,11 @@
 wandb:
   api: "-"
   project: "SE3-Transformer"
-  run_name: "SE3-unet-v0.0.0.1"
+  run_name: "SE3-unet-v0.0.0.5"
 
 train_set:
-  preprocessing: "none"                         #choices=['icp', 'spatial_transformer', 'none']
-  break_ds_with: "none"                         #choices=['rotation', 'translation', 'rotation_translation', 'none']
+  preprocessing: "spatial_transformer"          #choices=['icp', 'spatial_transformer', 'none']
+  break_ds_with: "rotation_translation"         #choices=['rotation', 'translation', 'rotation_translation', 'none']
   split: "Train"
   ds_path: "./Facescape"
   category: "Neutral"
@@ -13,8 +13,8 @@ train_set:
   reduce_pointcloud_to: 2048
 
 test_set:
-  preprocessing: "none"                         #choices=['icp', 'spatial_transformer', 'none']
-  break_ds_with: "none"                         #choices=['rotation', 'translation', 'rotation_translation', 'none']
+  preprocessing: "spatial_transformer"                      #choices=['icp', 'spatial_transformer', 'none']
+  break_ds_with: "rotation_translation"                     #choices=['rotation', 'translation', 'rotation_translation', 'none']
   split: "Test"
   ds_path: "./Facescape"
   category: "Neutral"
@@ -34,17 +34,17 @@ model:
 
 hyper:
   epochs: 3
-  learning_rate: 0.01
-  batch_training_size: 5
-  batch_eval_size: 5
+  learning_rate: 0.0001
+  batch_training_size: 1
+  batch_eval_size: 1
   device: "cuda"
   gradient_accumulation_steps: 1
   logging_steps: 5
   checkpoint_dir: "checkpoints"
   save_every: 1
   save_max: 3
-  optimizer: "SGD"
-  optimizer_kwargs: 
-    momentum: 0.9
+  optimizer: "Amdam"
+  optimizer_kwargs: ""
+    #momentum: 0.9
   scheduler: "CosineAnelingLr"
   features: "v"
