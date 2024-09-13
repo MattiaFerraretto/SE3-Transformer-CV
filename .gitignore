@@ -5,3 +5,4 @@ Facescape/*
 train.yaml
 wandb/*
 checkpoints/*
+sandbox.ipynb

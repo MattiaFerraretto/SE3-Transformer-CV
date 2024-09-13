@@ -1,14 +1,30 @@
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 from torch.utils.data import Dataset
 from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR
 import wandb
 import os
-from tqdm import tqdm
 from tqdm import trange
 
-def eval_loop(model: nn.Module, eval_set: Dataset, criterion: nn.BCEWithLogitsLoss, device, features, batch_size):
+class WBCEWithLogits(nn.Module):
+    def __init__(self, threshold: float=0.5, max_clamp: float = 200.0):
+        super(WBCEWithLogits, self).__init__()
+        self.threshold = threshold
+        self.max_clamp = max_clamp
+
+    
+    def forward(self, logits, targets):
+        pos_weight = (targets.shape[0] / (targets > self.threshold).sum(dim=0)).clamp(1, self.max_clamp)
+
+        loss = F.binary_cross_entropy_with_logits(
+            logits, targets, pos_weight=pos_weight, reduction='mean'
+        )
+
+        return loss
+
+def eval_loop(model: nn.Module, eval_set: Dataset, criterion: WBCEWithLogits, device, features, batch_size):
     model.eval()
     total_loss = 0.0
 
@@ -60,7 +76,7 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
     model.to(config['device'])
     #optimizer = SGD(model.parameters(), lr=config['learning_rate'], momentum=0.9)
     optimizer = Adam(model.parameters(), lr=config['learning_rate'])
-    criterion = nn.BCEWithLogitsLoss()
+    criterion = WBCEWithLogits()
 
     scheduler = CosineAnnealingLR(optimizer, config['epochs'], eta_min=1e-6)
 

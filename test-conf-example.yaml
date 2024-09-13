@@ -1,5 +1,5 @@
-dataset:
-  preprocessing: "icp"                         #choices=['icp', 'spatial_transformer', 'none']
+test_set:
+  preprocessing: "spatial_transformer"                         #choices=['icp', 'spatial_transformer', 'none']
   break_ds_with: "rotation_translation"        #choices=['rotation', 'translation', 'rotation_translation', 'none']
   split: "Test"
   ds_path: "./Facescape"
@@ -18,3 +18,10 @@ model:
   out_features: 68
   pooling_ratio: 0.1
   aggr: "max"
+
+checkpoint_fpath: "./checkpoints/checkpoint-1.pth"
+
+hyper:
+  batch_size: 1
+  device: "cpu"
+  features: "v"
