@@ -72,15 +72,29 @@ def save_checkpoint(model: nn.Module, optimizer: Adam, epoch: int, val_loss: flo
 
 
 def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
+
+    if config['from_checkpoint']:
+        checkpoint = torch.load(config['checkpoint_fpath'], map_location='cpu')
+        
+        model.load_state_dict(checkpoint['model_state_dict'])
+
+        optimizer = Adam(model.parameters())
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+        scheduler = CosineAnnealingLR(optimizer, T_max=config['epochs'], eta_min=1e-6, last_epoch=checkpoint['epoch'])
+        
+        start_epoch = checkpoint['epoch'] + 1
+    else:
+        #optimizer = SGD(model.parameters(), lr=config['learning_rate'], momentum=0.9)
+        optimizer = Adam(model.parameters(), lr=config['learning_rate'])
+        scheduler = CosineAnnealingLR(optimizer, T_max=config['epochs'], eta_min=1e-6)
+        start_epoch = 0
     
     model.to(config['device'])
-    #optimizer = SGD(model.parameters(), lr=config['learning_rate'], momentum=0.9)
-    optimizer = Adam(model.parameters(), lr=config['learning_rate'])
+    
     criterion = WBCEWithLogits()
 
-    scheduler = CosineAnnealingLR(optimizer, config['epochs'], eta_min=1e-6)
-
-    for epoch in range(config['epochs']):
+    for epoch in range(start_epoch, config['epochs']):
         model.train()
         running_loss = 0.0
 

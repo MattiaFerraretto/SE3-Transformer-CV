@@ -1,7 +1,7 @@
 wandb:
   api: "-"
   project: "SE3-Transformer"
-  run_name: "SE3-unet-v0.0.0.5"
+  run_name: "SE3-unet-v0.0.0.9"
 
 train_set:
   preprocessing: "spatial_transformer"          #choices=['icp', 'spatial_transformer', 'none']
@@ -33,7 +33,7 @@ model:
   aggr: "max"
 
 hyper:
-  epochs: 3
+  epochs: 25
   learning_rate: 0.0001
   batch_training_size: 1
   batch_eval_size: 1
@@ -43,8 +43,10 @@ hyper:
   checkpoint_dir: "checkpoints"
   save_every: 1
   save_max: 3
-  optimizer: "Amdam"
+  optimizer: "Adam"
   optimizer_kwargs: ""
     #momentum: 0.9
   scheduler: "CosineAnelingLr"
   features: "v"
+  from_checkpoint: False
+  checkpoint_fpath: ""
