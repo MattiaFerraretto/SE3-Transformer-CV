@@ -35,6 +35,13 @@ class FaceLandmarkDataset(Dataset):
         self.reduce_pointcloud_to = reduce_pointcloud_to
         
         self.faces, self.landmark_gts, self.heatmaps, self.scales = self.load_face_data()
+
+        if self.reduce_pointcloud_to is not None:
+            self.faces, self.heatmaps = self._reduce(
+                n_points=self.reduce_pointcloud_to,
+                point_cloud=self.faces,
+                landmarks=self.landmark_gts
+            )
             
         # if it is not none, then i want it aligned.
         # However, if I break it with an E(3) transformation, then I need a pre-processing step for the model.
@@ -44,6 +51,20 @@ class FaceLandmarkDataset(Dataset):
             self.faces, self.landmark_gts = batch_icp(self.faces_aug, self.landmark_gts_aug, pointcloud_ref, landmarks_ref)
         elif self.preprocessing == 'spatial_transformer' and self.break_ds_with != 'none':
             self.faces, self.landmark_gts = augmentation(self.faces, self.landmark_gts, transformation=self.break_ds_with)
+
+        print("Preprocessing:", self.preprocessing)
+        print("Dataset:", self.ds_name)
+        print("Category:", self.category)
+        print("\n")
+
+        print("Len dataset: ", self.faces.shape)
+        print("Face: ", self.faces.shape)
+        print("Landmark: ", self.landmark_gts.shape)
+        print("Heatmaps: ", self.heatmaps.shape)
+        #print("Filename: ", self.filenames.shape)
+        print("Scale: ", self.scales.shape)
+        # if self.ds_name != 'York' and self.ds_name != 'Lafas': 
+        #     print("Emotion: ", set(emotions))
         
     def save_pt_reference_for_icp(self, pointcloud, landmarks, path):
         if not os.path.exists(path):
@@ -63,28 +84,16 @@ class FaceLandmarkDataset(Dataset):
         scales = dataset['scale_list']
 
 
-        print("Preprocessing:", self.preprocessing)
-        print("Dataset:", self.ds_name)
-        print("Category:", self.category)
-        print("\n")
-
-        print("Len dataset: ", faces.shape)
-        print("Face: ", faces.shape)
-        print("Landmark: ", landmark_gts.shape)
-        print("Heatmaps: ", heatmaps.shape)
-        print("Filename: ", filenames.shape)
-        print("Scale: ", scales.shape)
-        if self.ds_name != 'York' and self.ds_name != 'Lafas': 
-            print("Emotion: ", set(emotions))
+       
         
         return torch.tensor(faces,  dtype=torch.float32), torch.tensor(landmark_gts,  dtype=torch.float32), torch.tensor(heatmaps,  dtype=torch.float32), torch.tensor(scales,  dtype=torch.float32)
     
     
     def _reduce(self, n_points: int, point_cloud: torch.tensor,landmarks: torch.tensor, sigma: float=0.08):
         #original_dim = point_cloud.dim()
-        if point_cloud.dim() == 2:
-            point_cloud = torch.unsqueeze(point_cloud, dim=0)
-            landmarks = torch.unsqueeze(landmarks, dim=0)
+        # if point_cloud.dim() == 2:
+        #     point_cloud = torch.unsqueeze(point_cloud, dim=0)
+        #     landmarks = torch.unsqueeze(landmarks, dim=0)
 
         point_idxs = farthest_point_sampler(point_cloud, n_points)
         dim0_index = torch.arange(point_cloud.shape[0]).unsqueeze(-1)
@@ -104,16 +113,9 @@ class FaceLandmarkDataset(Dataset):
         
         #landmark = self.landmark_gts[item]
         #scale = self.scales[item]
-
-        if self.reduce_pointcloud_to is not None:
-            face, heatmap = self._reduce(
-                n_points=self.reduce_pointcloud_to,
-                point_cloud=self.faces[item],
-                landmarks=self.landmark_gts[item]
-            )
-        else:
-            face = self.faces[item]
-            heatmap = self.heatmaps[item] if self.heatmaps[item].dim() == 3 else torch.unsqueeze(self.heatmaps[item], dim=0)
+        
+        face = self.faces[item]
+        heatmap = self.heatmaps[item] if self.heatmaps[item].dim() == 3 else torch.unsqueeze(self.heatmaps[item], dim=0)
 
         knn_g = dgl.knn_graph(face, k=40, algorithm='kd-tree', exclude_self=True)
         

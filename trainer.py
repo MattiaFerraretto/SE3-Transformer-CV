@@ -23,6 +23,24 @@ class WBCEWithLogits(nn.Module):
         )
 
         return loss
+    
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=1, gamma=2, pos_weight=None, reduction='mean'):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.pos_weight = pos_weight
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        BCE_loss = F.binary_cross_entropy_with_logits(
+            inputs, targets, pos_weight=self.pos_weight, reduction='none'
+        )
+
+        pt = torch.exp(-BCE_loss)
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+        
+        return F_loss.mean()
 
 def compute_pos_weight(labels: torch.tensor, threshold: float=0.5):
     labels = labels.reshape(-1, labels.shape[-1])
@@ -98,11 +116,12 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
     
     model.to(config['device'])
 
-    _, labels = train_set[:]
-    pos_weight = compute_pos_weight(labels)
+    #_, labels = train_set[:]
+    pos_weight = compute_pos_weight(train_set.heatmaps)
     
     #criterion = WBCEWithLogits()
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    #criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(config['device']))
+    criterion = FocalLoss(pos_weight=pos_weight.to(config['device']))
 
     for epoch in range(start_epoch, config['epochs']):
         model.train()
