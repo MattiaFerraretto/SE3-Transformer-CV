@@ -66,7 +66,7 @@ if __name__ == "__main__":
         #         batch_size
         #     )
 
-        pointclouds, y = test_set[45]
+        pointclouds, y = test_set[23]
         y_hat = model(
             pointclouds.to(device),
             features,

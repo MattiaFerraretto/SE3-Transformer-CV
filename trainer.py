@@ -24,6 +24,12 @@ class WBCEWithLogits(nn.Module):
 
         return loss
 
+def compute_pos_weight(labels: torch.tensor, threshold: float=0.5):
+    labels = labels.reshape(-1, labels.shape[-1])
+    H, _ = labels.shape
+
+    return H / (labels > threshold).sum(dim=0)
+
 def eval_loop(model: nn.Module, eval_set: Dataset, criterion: WBCEWithLogits, device, features, batch_size):
     model.eval()
     total_loss = 0.0
@@ -91,8 +97,12 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
         start_epoch = 0
     
     model.to(config['device'])
+
+    _, labels = train_set[:]
+    pos_weight = compute_pos_weight(labels)
     
-    criterion = WBCEWithLogits()
+    #criterion = WBCEWithLogits()
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     for epoch in range(start_epoch, config['epochs']):
         model.train()
