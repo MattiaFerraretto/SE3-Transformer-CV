@@ -122,7 +122,7 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
     #criterion = WBCEWithLogits()
     #criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(config['device']))
     #criterion = FocalLoss(pos_weight=pos_weight.to(config['device']))
-    criterion = FocalLoss()
+    criterion = FocalLoss(alpha=0.9)
 
     for epoch in range(start_epoch, config['epochs']):
         model.train()

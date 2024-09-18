@@ -36,7 +36,7 @@ class FaceLandmarkDataset(Dataset):
         
         self.faces, self.landmark_gts, self.heatmaps, self.scales = self.load_face_data()
 
-        if self.reduce_pointcloud_to is not None:
+        if self.reduce_pointcloud_to != 'None':
             self.faces, self.heatmaps = self._reduce(
                 n_points=self.reduce_pointcloud_to,
                 point_cloud=self.faces,
@@ -113,7 +113,7 @@ class FaceLandmarkDataset(Dataset):
         
         #landmark = self.landmark_gts[item]
         #scale = self.scales[item]
-        
+
         face = self.faces[item]
         heatmap = self.heatmaps[item] if self.heatmaps[item].dim() == 3 else torch.unsqueeze(self.heatmaps[item], dim=0)
 
