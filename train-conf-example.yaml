@@ -1,7 +1,7 @@
 wandb:
   api: "-"
   project: "SE3-Transformer"
-  run_name: "SE3-unet-v0.0.0.9"
+  run_name: "SE3-unet-v0.0.5.0"
 
 train_set:
   preprocessing: "spatial_transformer"          #choices=['icp', 'spatial_transformer', 'none']
@@ -24,8 +24,8 @@ test_set:
 model:
   #name: "SE3Unet"
   n_layers: 4
-  si_m: "att"
-  si_e: "1x1"
+  si_m: "1x1"
+  si_e: "att"
   in_features: 3
   hidden_channels: 5  # ref paper 5
   out_features: 68
@@ -34,7 +34,7 @@ model:
 
 hyper:
   epochs: 25
-  learning_rate: 0.0001
+  learning_rate: 0.0003
   batch_training_size: 1
   batch_eval_size: 1
   device: "cuda"
@@ -42,7 +42,7 @@ hyper:
   logging_steps: 5
   checkpoint_dir: "checkpoints"
   save_every: 1
-  save_max: 3
+  save_max: 6
   optimizer: "Adam"
   optimizer_kwargs: ""
     #momentum: 0.9

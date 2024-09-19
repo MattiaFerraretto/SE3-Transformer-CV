@@ -117,12 +117,12 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
     model.to(config['device'])
 
     #_, labels = train_set[:]
-    #pos_weight = compute_pos_weight(train_set.heatmaps)
+    pos_weight = compute_pos_weight(train_set.heatmaps)
     
     #criterion = WBCEWithLogits()
-    #criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(config['device']))
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(config['device']), reduction='sum')
     #criterion = FocalLoss(pos_weight=pos_weight.to(config['device']))
-    criterion = FocalLoss(alpha=0.9)
+    #criterion = FocalLoss(alpha=0.9)
 
     for epoch in range(start_epoch, config['epochs']):
         model.train()

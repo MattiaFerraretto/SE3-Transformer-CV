@@ -11,15 +11,15 @@ test_set:
 model:
   #name: "SE3Unet"
   n_layers: 4
-  si_m: "att"
-  si_e: "1x1"
+  si_m: "1x1"
+  si_e: "att"
   in_features: 3
   hidden_channels: 5  # ref paper 5
   out_features: 68
   pooling_ratio: 0.1
   aggr: "max"
 
-checkpoint_fpath: "./checkpoints/checkpoint-5-v0.0.2.0.pth"
+checkpoint_fpath: "./checkpoints/checkpoint-6-v0.0.4.0.pth"
 
 hyper:
   batch_size: 1
