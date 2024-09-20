@@ -47,18 +47,30 @@ class FocalLoss(nn.Module):
         )
 
         print(BCE_loss.max())
-        pt = torch.exp(-BCE_loss)
-        print(pt.max())
-        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+        # pt = torch.exp(-BCE_loss)
+        # print(pt.max())
+        # F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+
+        targets = (targets > 0.5).float()
+
+        pt = targets * torch.sigmoid(inputs) + (1 - targets) * (1 - torch.sigmoid(inputs))
+
+        F_loss = - self.alpha * (1 -pt) ** self.gamma * torch.log(pt)
+
+        print(F_loss)
+
+
+
+
         
-        return F_loss.sum()
+        return BCE_loss.mean()
 
 
 def compute_pos_weight(labels: torch.tensor, threshold: float=0.5):
     labels = labels.reshape(-1, labels.shape[-1])
     H, _ = labels.shape
 
-    return H / (labels > threshold).sum(dim=0) 
+    return H / (labels > threshold).sum(dim=0)
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -83,7 +95,8 @@ if __name__ == "__main__":
 
     pos_weigth = compute_pos_weight(test_set.heatmaps)
     print(pos_weigth)
-    criterion = FocalLoss(alpha=0.085, gamma=2, pos_weight= pos_weigth)
+    #criterion = FocalLoss(alpha=pos_weigth, gamma=2)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weigth, reduction='mean')
 
     with torch.no_grad():
         # for i in trange(0, len(test_set), batch_size, desc="Testing.."):
