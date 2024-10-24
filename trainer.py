@@ -3,44 +3,26 @@ import torch.nn as nn
 from torch.nn import functional as F
 from torch.utils.data import Dataset
 from torch.optim import Adam, SGD
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmRestarts
 import wandb
 import os
 from tqdm import trange
-
-class WBCEWithLogits(nn.Module):
-    def __init__(self, threshold: float=0.5, max_clamp: float = 200.0):
-        super(WBCEWithLogits, self).__init__()
-        self.threshold = threshold
-        self.max_clamp = max_clamp
-
-    
-    def forward(self, logits, targets):
-        pos_weight = (targets.shape[0] / (targets > self.threshold).sum(dim=0)).clamp(1, self.max_clamp)
-
-        loss = F.binary_cross_entropy_with_logits(
-            logits, targets, pos_weight=pos_weight, reduction='mean'
-        )
-
-        return loss
     
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=1, gamma=2, pos_weight=None, reduction='mean'):
+    def __init__(self, alpha=1, gamma=2):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
-        self.pos_weight = pos_weight
-        self.reduction = reduction
 
     def forward(self, inputs, targets):
-        BCE_loss = F.binary_cross_entropy_with_logits(
-            inputs, targets, pos_weight=self.pos_weight, reduction='none'
-        )
 
-        pt = torch.exp(-BCE_loss)
-        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+        pt = targets * torch.sigmoid(inputs) + (1 - targets) * (1 - torch.sigmoid(inputs))
+
+        alpha = torch.where(targets == 1, self.alpha, 1 - self.alpha + 1e-8)
+
+        F_loss = - alpha * (1 -pt) ** self.gamma * torch.log(pt + 1e-8)
         
-        return F_loss.mean()
+        return F_loss.sum()
 
 def compute_pos_weight(labels: torch.tensor, threshold: float=0.5):
     labels = labels.reshape(-1, labels.shape[-1])
@@ -48,7 +30,7 @@ def compute_pos_weight(labels: torch.tensor, threshold: float=0.5):
 
     return H / (labels > threshold).sum(dim=0)
 
-def eval_loop(model: nn.Module, eval_set: Dataset, criterion: WBCEWithLogits, device, features, batch_size):
+def eval_loop(model: nn.Module, eval_set: Dataset, criterion: nn.BCEWithLogitsLoss, device, features, batch_size):
     model.eval()
     total_loss = 0.0
 
@@ -59,7 +41,7 @@ def eval_loop(model: nn.Module, eval_set: Dataset, criterion: WBCEWithLogits, de
             y_hat = model(
                 pointclouds.to(device),
                 features,
-                batch_size
+                y.shape[0]
             )
             
             loss = criterion(
@@ -71,7 +53,7 @@ def eval_loop(model: nn.Module, eval_set: Dataset, criterion: WBCEWithLogits, de
 
     return total_loss / len(eval_set)
 
-def save_checkpoint(model: nn.Module, optimizer: Adam, epoch: int, val_loss: float, out_dir: str, save_every: int,  save_max: int):
+def save_checkpoint(model: nn.Module, optimizer: Adam, scheduler: CosineAnnealingWarmRestarts, epoch: int, val_loss: float, out_dir: str, save_every: int,  save_max: int):
     if (epoch + 1) % save_every != 0:
       return
 
@@ -79,6 +61,7 @@ def save_checkpoint(model: nn.Module, optimizer: Adam, epoch: int, val_loss: flo
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
         'val_loss': val_loss,
     }
 
@@ -96,45 +79,44 @@ def save_checkpoint(model: nn.Module, optimizer: Adam, epoch: int, val_loss: flo
 
 
 def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
+    
+    model.to(config['device'])
 
     if config['from_checkpoint']:
-        checkpoint = torch.load(config['checkpoint_fpath'], map_location='cpu')
+        checkpoint = torch.load(config['checkpoint_fpath'], map_location=config['device'])
         
         model.load_state_dict(checkpoint['model_state_dict'])
 
         optimizer = Adam(model.parameters())
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-        scheduler = CosineAnnealingLR(optimizer, T_max=config['epochs'], eta_min=1e-6, last_epoch=checkpoint['epoch'])
+        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=config['epochs'], eta_min=1e-8, last_epoch=checkpoint['epoch'])
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         
         start_epoch = checkpoint['epoch'] + 1
     else:
         #optimizer = SGD(model.parameters(), lr=config['learning_rate'], momentum=0.9)
         optimizer = Adam(model.parameters(), lr=config['learning_rate'])
-        scheduler = CosineAnnealingLR(optimizer, T_max=config['epochs'], eta_min=1e-6)
+        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=config['epochs'], eta_min=1e-8)
         start_epoch = 0
-    
-    model.to(config['device'])
 
-    #_, labels = train_set[:]
     pos_weight = compute_pos_weight(train_set.heatmaps)
     
-    #criterion = WBCEWithLogits()
     criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(config['device']))
-    #criterion = FocalLoss(pos_weight=pos_weight.to(config['device']))
-    #criterion = FocalLoss(alpha=0.9)
+    #criterion = FocalLoss(alpha=0.98, gamma=3)
 
     for epoch in range(start_epoch, config['epochs']):
         model.train()
         running_loss = 0.0
-
+        num_iters = len(train_set)
+        
         for i in trange(0, len(train_set), config['batch_training_size'],  desc=f"Epoch {epoch+1}/{config['epochs']}"):
             pointclouds, y = train_set[i : i + config['batch_training_size']]
 
             y_hat = model(
                 pointclouds.to(config['device']),
                 config['features'],
-                config['batch_training_size']
+                y.shape[0]
             )
 
             loss = criterion(
@@ -185,6 +167,7 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
         save_checkpoint(
             model,
             optimizer,
+            scheduler,
             epoch,
             val_loss,
             config['checkpoint_dir'],

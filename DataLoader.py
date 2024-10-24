@@ -35,22 +35,32 @@ class FaceLandmarkDataset(Dataset):
         self.reduce_pointcloud_to = reduce_pointcloud_to
         
         self.faces, self.landmark_gts, self.heatmaps, self.scales = self.load_face_data()
-
+            
+        # if it is not none, then i want it aligned.
+        # However, if I break it with an E(3) transformation, then I need a pre-processing step for the model.
+        if self.preprocessing == 'icp' and self.break_ds_with != 'none':
+            pointcloud_ref, landmarks_ref = self.save_pt_reference_for_icp(
+                self.faces[0],
+                self.landmark_gts[0],
+                references_pointclouds_icp_path,
+                os.path.join(
+                    references_pointclouds_icp_path,
+                    self.ds_name+"_"+self.category+"_"+self.split+"_reference_pointcloud_icp.pt"
+                )
+            )
+            self.faces_aug, self.landmark_gts_aug = augmentation(self.faces, self.landmark_gts, transformation=self.break_ds_with)
+            self.faces, self.landmark_gts = batch_icp(self.faces_aug, self.landmark_gts_aug, pointcloud_ref, landmarks_ref)
+            
+        elif self.preprocessing == 'spatial_transformer' and self.break_ds_with != 'none':
+            self.faces, self.landmark_gts = augmentation(self.faces, self.landmark_gts, transformation=self.break_ds_with)
+            
+        
         if self.reduce_pointcloud_to != 'None':
             self.faces, self.heatmaps = self._reduce(
                 n_points=self.reduce_pointcloud_to,
                 point_cloud=self.faces,
                 landmarks=self.landmark_gts
             )
-            
-        # if it is not none, then i want it aligned.
-        # However, if I break it with an E(3) transformation, then I need a pre-processing step for the model.
-        if self.preprocessing == 'icp' and self.break_ds_with != 'none':
-            pointcloud_ref, landmarks_ref = self.save_pt_reference_for_icp(self.faces[0], self.landmark_gts[0], os.path.join(references_pointclouds_icp_path, self.ds_name+"_"+self.category+"_reference_pointcloud_icp.pt"))
-            self.faces_aug, self.landmark_gts_aug = augmentation(self.faces, self.landmark_gts, transformation=self.break_ds_with)
-            self.faces, self.landmark_gts = batch_icp(self.faces_aug, self.landmark_gts_aug, pointcloud_ref, landmarks_ref)
-        elif self.preprocessing == 'spatial_transformer' and self.break_ds_with != 'none':
-            self.faces, self.landmark_gts = augmentation(self.faces, self.landmark_gts, transformation=self.break_ds_with)
 
         print("Preprocessing:", self.preprocessing)
         print("Dataset:", self.ds_name)
@@ -66,9 +76,10 @@ class FaceLandmarkDataset(Dataset):
         # if self.ds_name != 'York' and self.ds_name != 'Lafas': 
         #     print("Emotion: ", set(emotions))
         
-    def save_pt_reference_for_icp(self, pointcloud, landmarks, path):
-        if not os.path.exists(path):
-            torch.save(Data(data=pointcloud, landmarks=landmarks), path)
+    def save_pt_reference_for_icp(self, pointcloud, landmarks, folder, path):
+        os.makedirs(folder, exist_ok = True) 
+        torch.save(Data(data=pointcloud, landmarks=landmarks), path)
+        
         return torch.load(path).data, torch.load(path).landmarks
         
     def load_face_data(self):
@@ -90,10 +101,10 @@ class FaceLandmarkDataset(Dataset):
     
     
     def _reduce(self, n_points: int, point_cloud: torch.tensor,landmarks: torch.tensor, sigma: float=0.08):
-        #original_dim = point_cloud.dim()
-        # if point_cloud.dim() == 2:
-        #     point_cloud = torch.unsqueeze(point_cloud, dim=0)
-        #     landmarks = torch.unsqueeze(landmarks, dim=0)
+        original_dim = point_cloud.dim()
+        if point_cloud.dim() == 2:
+            point_cloud = torch.unsqueeze(point_cloud, dim=0)  
+            landmarks = torch.unsqueeze(landmarks, dim=0)
 
         point_idxs = farthest_point_sampler(point_cloud, n_points)
         dim0_index = torch.arange(point_cloud.shape[0]).unsqueeze(-1)
@@ -103,17 +114,19 @@ class FaceLandmarkDataset(Dataset):
         sqrd_distances = torch.sum((point_cloud[:, :, None, :] - landmarks[:, None, :, :])**2, dim=-1)
         heatmap = torch.exp(- sqrd_distances / (2 * sigma ** 2))
 
-        # if point_cloud.dim() != original_dim:
-        #     point_cloud = torch.squeeze(point_cloud, dim=0)
-        #     heatmap = torch.squeeze(heatmap, dim=0)
-
         return point_cloud, heatmap
 
     def __getitem__(self, item):
         
         #landmark = self.landmark_gts[item]
         #scale = self.scales[item]
-
+        #if self.reduce_pointcloud_to != 'None':
+        #    face, heatmap = self._reduce(
+        #        n_points=self.reduce_pointcloud_to,
+        #        point_cloud=self.faces[item],
+        #        landmarks=self.landmark_gts[item]
+        #    )
+        #else:
         face = self.faces[item]
         heatmap = self.heatmaps[item] if self.heatmaps[item].dim() == 3 else torch.unsqueeze(self.heatmaps[item], dim=0)
 
@@ -127,7 +140,7 @@ class FaceLandmarkDataset(Dataset):
         knn_g.edata['d'] = face[indices_dst] - face[indices_src]
         knn_g.edata['w'] = torch.sqrt(torch.sum(knn_g.edata['d']**2, dim=-1, keepdim=True))
 
-        return knn_g, heatmap
+        return knn_g, (heatmap > 0.5).float()
 
     def __len__(self):
         return self.faces.shape[0]
