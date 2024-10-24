@@ -4,5 +4,4 @@ Preprocessing/reference_pointclouds_for_icp/Facescape_Neutral_reference_pointclo
 Facescape/*
 train.yaml
 wandb/*
-checkpoints/*
 sandbox.ipynb

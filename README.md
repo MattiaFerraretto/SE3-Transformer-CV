@@ -1,69 +1,47 @@
-# Dataset and Usage
+# SE(3)-Unet
 
-## Dataset
-Dataset [Facescape](http://facescape.nju.edu.cn).
+This repo contains an implemetation of the SE(3)-Unet. It is a revision of the classic U-net network where instead of using classic convolution, SE(3) transfomations have been applied. Major details in the technical report attached. The code contained in se3 folder have been taken from the original implmentation [*SE(3)-Transformers: 3D Roto-Translation Equivariant Attention Networks*](https://arxiv.org/pdf/2006.10503). 
 
-## Usage
-This folder is provided to you as a help to bypass the data extraction. You just need to use it as follows:
-```python
-import os
-from configuration import * 
-from DataLoader import FaceLandmarkDataset
+## Setting up
 
-if __name__ == "__main__":
-    args = parser.parse_args()
-        
-    # Print dataset info in input
-    print("Preprocessing:", args.preprocessing)
-    print("Dataset:", args.dataset)
-    print("Category:", args.category)
+To setting up the environment you must:
+1. Create a virtual environment with python 3.10 using conda:
+   ```bash
+   conda create -n venv python=3.10
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Install manually lie_learn package:
+   ```bash
+   pip install git+https://github.com/AMLab-Amsterdam/lie_learn
+   ```
+4. Install manually dgl package according to your cuda installation (e.g.):
+   ```bash
+   pip install  dgl -f https://data.dgl.ai/wheels/torch-2.1/cu118/repo.html
+   ```
+   Major details on [DGL official website](https://www.dgl.ai/pages/start.html)
 
-    # Call Train and Test dataset loaders
-    print("################## TRAIN INFO ################")
-    train_dataset = FaceLandmarkDataset(args, path_dataset=os.path.join(path_datasets_resampled, args.dataset, "Train", "train_neutral.npy"), dataset_name=args.dataset)
-    print("################## TEST INFO #################")
-    test_dataset = FaceLandmarkDataset(args, path_dataset=os.path.join(path_datasets_resampled, args.dataset, "Test", "test_neutral.npy"), dataset_name=args.dataset)
+## Usage 
 
-    print("############# TRAIN + TEST INFO #############")
-    print("The number of samples in the dataset is %d" % (len(train_dataset) + len(test_dataset)))
-    print("The number of samples in the training dataset is %d" % len(train_dataset))
-    print("The number of samples in the test dataset is %d" % len(test_dataset))
+To run the code download the dataset in such a way to have the following structure:
+```
+├── Facescape       
+│   ├── Train
+│   │   └── train_neutral.npy
+│   └── Test 
+│       └── test_neutral.npy
+└── ...
 ```
 
-It is important that you perform the tests on ```SE(3)-Transformer``` using two different preprocessing methods: *ICP* and *SpatialTransformer* using the option ```--preprocessing=<...>``` as following:
-```python
-# If you want to use icp as preprocessing step
-python main.py --preprocessing=icp
-
-# If you want to use spatial_transformer as preprocessing step
-python main.py --preprocessing=spatial_transformer
-
-# If you want to skip the preprocessing step
-python main.py --preprocessing=none
+Then lauch training:
+```bash
+python train.py --config_path train-conf-example.yaml
 ```
-By using the **icp** option, a random roto-translation will be applied to both the train and test sets and then aligned using two algorithms: *Procrustes* and *ICP*. On the other hand, by using the **spatial_transformer** option, a random roto-translation will be applied to both the train and test sets, and it will be the responsibility of the module defined in the ```Spatial_Transformer class``` to learn a roto-translation matrix to align the data. An example of how to use it can be found in the ```spatial_transformer.py``` file, and you should use it as a pre-processing step as done in the paper [DGCNN](https://arxiv.org/abs/1801.07829) that we have indicated to you.
 
- ## Folder Structure
-    MattiaFerrarettoDataset
-    ├── Facescape       
-    │   ├── Train
-    │   │   └── train_neutral.npy
-    │   └── Test 
-    │       └── test_neutral.npy
-    ├── Preprocessing
-    │   ├── reference_pointcloud_for_icp
-    │   │   └── ...
-    │   ├── augmentation.py
-    │   ├── procrustes_icp.py
-    │   └── spatial_transformer.py
-    ├── check_dataset.ipynb
-    ├── configuration.py
-    ├── DataLoader.py
-    └── main.py
-
-### Info
-- **train_neutral.npy** and **test_neutral.npy :** These two files contains the train and test data stored in a dictionary with the following fields. An example of reading and usage of these file can be found in **check_dataset.ipynb**
-- **spatial_transformer.py :** Subclass of ```nn.Module``` which implements the module defined in [DGCNN](https://arxiv.org/abs/1801.07829) to learn a rote-translation in order to align input data.
-- **DataLoader.py :**  ```FaceLandmarkDataset``` class.
-- **main.py :** Example of usage of the DataLoader ```FaceLandmarkDataset```
+Finally test training results:
+```bash
+python test.py --config_path test-conf-example.yaml
+```
 

@@ -26,11 +26,13 @@ def compute_scores(y, y_hat):
     for i, threshold in enumerate(thresholds):
         y_bin_hat = (torch.sigmoid(y_hat) > threshold).float()
 
+        #MICRO AGGR APPROACH
         tp = ((y == 1) & (y_bin_hat == 1)).sum(axis=-2).sum(-1)
         fn = ((y == 1) & (y_bin_hat == 0)).sum(axis=-2).sum(-1)
         fp = ((y == 0) & (y_bin_hat == 1)).sum(axis=-2).sum(-1)
         tn = ((y == 0) & (y_bin_hat == 0)).sum(axis=-2).sum(-1)
 
+        #MACRO AGGR APPROACH
         # tp = ((y == 1) & (y_bin_hat == 1)).sum(axis=-2)
         # fn = ((y == 1) & (y_bin_hat == 0)).sum(axis=-2)
         # fp = ((y == 0) & (y_bin_hat == 1)).sum(axis=-2)
@@ -44,7 +46,7 @@ def compute_scores(y, y_hat):
         recalls[:, i] = recall
         f1_scores[:, i] = f1_score
 
-
+        #MACRO AGGR APPROACH
         # precisions[:, i] = precision.mean(axis=-1)
         # recalls[:, i] = recall.mean(axis=-1)
         # f1_scores[:, i] = f1_score.mean(axis=-1)
