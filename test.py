@@ -126,9 +126,6 @@ def test_loop(model: nn.Module, test_set: Dataset, batch_size:int, features: str
             recalls.append(recall_per_elem)
             f1_scores.append(f1_score_per_elem)
 
-            if i >= 15:
-                break
-
     precisions = torch.cat(precisions, axis=0).mean(axis=0)
     recalls = torch.cat(recalls, axis=0).mean(axis=0)
     f1_scores = torch.cat(f1_scores, axis=0).mean(axis=0)
