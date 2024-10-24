@@ -1,5 +1,5 @@
 test_set:
-  preprocessing: "spatial_transformer"                         #choices=['icp', 'spatial_transformer', 'none']
+  preprocessing: "icp"                         #choices=['icp', 'spatial_transformer', 'none']
   break_ds_with: "rotation_translation"        #choices=['rotation', 'translation', 'rotation_translation', 'none']
   split: "Test"
   ds_path: "./Facescape"
@@ -10,7 +10,7 @@ test_set:
 # Define the same configuration used during the training
 model:
   #name: "SE3Unet"
-  n_layers: 4
+  n_layers: 1
   si_m: "1x1"
   si_e: "att"
   in_features: 3
@@ -19,7 +19,7 @@ model:
   pooling_ratio: 0.1
   aggr: "max"
 
-checkpoint_fpath: "./checkpoints/checkpoint-6-v0.0.4.0.pth"
+checkpoint_fpath: "./checkpoints/run-31/checkpoint-10-v0.0.31.0.pth"
 
 hyper:
   batch_size: 1
