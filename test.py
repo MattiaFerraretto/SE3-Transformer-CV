@@ -25,6 +25,7 @@ def compute_scores(y, y_hat):
 
     for i, threshold in enumerate(thresholds):
         y_bin_hat = (torch.sigmoid(y_hat) > threshold).float()
+        y_bin_hat = y_bin_hat.to(y.device)
 
         #MICRO AGGR APPROACH
         tp = ((y == 1) & (y_bin_hat == 1)).sum(axis=-2).sum(-1)
@@ -132,12 +133,10 @@ def test_loop(model: nn.Module, test_set: Dataset, batch_size:int, features: str
 
     plot_metrics(thresholds, precisions, recalls, f1_scores)
 
-
-
 if __name__ == "__main__":
     args = parser.parse_args()
 
-    with open('./test-conf-example.yaml') as fp:
+    with open(args.config_path) as fp:
         conf = yaml.safe_load(fp)
 
     test_set = FaceLandmarkDataset(**conf['test_set'])

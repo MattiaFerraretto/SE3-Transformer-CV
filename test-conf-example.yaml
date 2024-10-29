@@ -19,7 +19,7 @@ model:
   pooling_ratio: 0.1
   aggr: "max"
 
-checkpoint_fpath: "./checkpoints/run-31/checkpoint-10-v0.0.31.0.pth"
+checkpoint_fpath: "./checkpoints/run-36/checkpoint-10-v0.0.36.0.pth"
 
 hyper:
   batch_size: 1
