@@ -7,7 +7,28 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmResta
 import wandb
 import os
 from tqdm import trange
-    
+
+class AdaptiveWingLoss(nn.Module):
+    def __init__(self, omega=14, theta=0.5, epsilon=1, alpha=2.1):
+        super(AdaptiveWingLoss, self).__init__()
+        self.omega = omega
+        self.theta = theta
+        self.epsilon = epsilon
+        self.alpha = alpha
+
+    def forward(self, y_true, y_pred):
+        delta_y = torch.abs(y_true - y_pred)
+        
+        loss_non_linear = self.omega * torch.log(1 + (delta_y / self.epsilon) ** (self.alpha - y_true))
+        
+        A = self.omega * (1 / (1 + (self.theta / self.epsilon) ** (self.alpha - y_true))) * (self.alpha - y_true) * ((self.theta / self.epsilon) ** (self.alpha - y_true - 1)) / self.epsilon
+        C = self.theta * A - self.omega * torch.log(1 + (self.theta / self.epsilon) ** (self.alpha - y_true))
+        loss_linear = A * delta_y - C
+
+        loss = torch.where(delta_y < self.theta, loss_non_linear, loss_linear) * (10 * (y_true >= 0.2).int() + 1)
+
+        return loss.mean()
+
 class FocalLoss(nn.Module):
     def __init__(self, alpha=1, gamma=2):
         super().__init__()

@@ -59,7 +59,8 @@ class FaceLandmarkDataset(Dataset):
             self.faces, self.heatmaps = self._reduce(
                 n_points=self.reduce_pointcloud_to,
                 point_cloud=self.faces,
-                landmarks=self.landmark_gts
+                landmarks=self.landmark_gts,
+                sigma=0.095
             )
 
         print("Preprocessing:", self.preprocessing)
@@ -140,7 +141,7 @@ class FaceLandmarkDataset(Dataset):
         knn_g.edata['d'] = face[indices_dst] - face[indices_src]
         knn_g.edata['w'] = torch.sqrt(torch.sum(knn_g.edata['d']**2, dim=-1, keepdim=True))
 
-        return knn_g, (heatmap > 0.5).float()
+        return knn_g, heatmap #(heatmap > 0.5).float()
 
     def __len__(self):
         return self.faces.shape[0]
