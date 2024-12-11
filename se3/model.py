@@ -222,9 +222,153 @@ class SE3Unet(nn.Module):
         )
 
         mlp = nn.Sequential(
-            nn.Linear(in_features=self.in_features, out_features=self.out_features),
+            nn.Linear(in_features=self.in_features, out_features=self.out_features, bias=False),
             nn.ReLU(),
-            nn.Linear(in_features=self.out_features, out_features=self.out_features),
+            #nn.Linear(in_features=self.out_features, out_features=self.out_features, bias=False),
+            #nn.ReLU(),
+        )
+        
+        return nn.ModuleList(down_branch), bottleneck, nn.ModuleList(up_branch), mlp
+    
+    def forward(self, G: dgl.graph, features: str, batch_size: int=1):
+        res = []
+
+        for i in range(0, self.n_layers*2, 2):
+            G.ndata[features] = self.down_branch[i](G)
+
+            G_pooled, G_level_structure, fp_idx = self.down_branch[i+1](G, features, batch_size)
+            res.append((G, G_level_structure, fp_idx))
+
+            G = G_pooled
+
+        G.ndata[features] = self.bottleneck(G)
+
+        res_idx = -1
+        for i in range(0, self.n_layers*2, 2):
+            G_res, G_level_structure, fp_idx = res[res_idx]
+
+            G_upsmapled = self.up_branch[i](G, features, G_level_structure, fp_idx)
+
+            G_upsmapled.ndata[features] = G_res.ndata[features] + G_upsmapled.ndata[features]
+
+            G_upsmapled.ndata[features] = self.up_branch[i+1](G_upsmapled)
+
+            G = G_upsmapled
+            res_idx = res_idx - 1
+
+        x = G.ndata[features].view(-1, G.ndata[features].size(0) // batch_size, self.in_features)
+        y_hat = self.mlp(x)
+
+        return y_hat
+
+class SE3UnetV2(nn.Module):
+
+    def __init__(
+            self,
+            n_layers: int,
+            si_m: str,
+            si_e: str,
+            in_features: int,
+            hidden_channels: int,
+            out_features: int,
+            pooling_ratio: float,
+            aggr: str
+        ):
+        super().__init__()
+        self.n_layers = n_layers
+        self.si_m = si_m
+        self.si_e = si_e
+        self.in_features = in_features
+        self.hidden_channels = hidden_channels
+        self.out_features = out_features
+        self.pooling_ratio = pooling_ratio
+        self.aggr = aggr
+
+        self.down_branch, self.bottleneck, self.up_branch, self.mlp = self._build_unet(n_layers)
+
+
+    def _build_unet(self, n_layers):
+        down_branch = []
+
+        for _ in range(n_layers):
+            down_branch.append(
+                SE3Transformer(
+                    num_layers=2,
+                    num_channels=self.hidden_channels,
+                    num_degrees=4,
+                    div=1,
+                    n_heads=1,
+                    si_m=self.si_m,
+                    si_e=self.si_m,
+                    x_ij= 'add'
+                )
+            )
+            down_branch.append(
+                Pooling3D(
+                    in_features=self.in_features,
+                    pooling_ratio=self.pooling_ratio,
+                    aggr=self.aggr
+                )
+            )
+
+        
+        bottleneck = SE3Transformer(
+            num_layers=2,
+            num_channels=self.hidden_channels,
+            num_degrees=4,
+            div=1,
+            n_heads=1,
+            si_m=self.si_m,
+            si_e=self.si_m,
+            x_ij= 'add'
+        )
+
+        up_branch = []
+        
+        for _ in range(n_layers-1):
+            up_branch.append(
+                Upsampling3D(
+                    in_features=self.in_features,
+                    power=2
+                )
+            )
+            up_branch.append(
+                SE3Transformer(
+                    num_layers=2,
+                    num_channels=self.hidden_channels,
+                    num_degrees=4,
+                    div=1,
+                    n_heads=1,
+                    si_m=self.si_m,
+                    si_e=self.si_m,
+                    x_ij= 'add'
+                )
+            )
+            
+        up_branch.append(
+            Upsampling3D(
+                in_features=self.in_features,
+                power=2
+            )
+        )
+        up_branch.append(
+            SE3Transformer(
+                num_layers=2,
+                num_channels=self.hidden_channels,
+                num_degrees=4,
+                div=1,
+                n_heads=1,
+                si_m=self.si_m,
+                si_e=self.si_e,
+                x_ij= 'add'
+            )
+        )
+
+        mlp = nn.Sequential(
+            nn.Linear(in_features=self.in_features, out_features=self.out_features, bias=False),
+            #nn.ReLU(),
+            #nn.Linear(in_features=self.out_features, out_features=self.out_features, bias=False),
+            #nn.ReLU(),
         )
         
         return nn.ModuleList(down_branch), bottleneck, nn.ModuleList(up_branch), mlp

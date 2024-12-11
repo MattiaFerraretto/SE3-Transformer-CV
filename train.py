@@ -1,6 +1,6 @@
 import argparse
 from DataLoader import FaceLandmarkDataset
-from se3.model import SE3Unet
+from se3.model import SE3Unet, SE3UnetV2
 
 import yaml
 import wandb
@@ -19,7 +19,7 @@ if __name__ == "__main__":
 
     train_set = FaceLandmarkDataset(**conf['train_set'])
     test_set = FaceLandmarkDataset(**conf['test_set'])
-    model = SE3Unet(**conf['model'])
+    model = SE3UnetV2(**conf['model'])
 
     wandb.login(key=conf['wandb']['api'])
 

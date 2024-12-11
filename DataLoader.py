@@ -141,7 +141,7 @@ class FaceLandmarkDataset(Dataset):
         knn_g.edata['d'] = face[indices_dst] - face[indices_src]
         knn_g.edata['w'] = torch.sqrt(torch.sum(knn_g.edata['d']**2, dim=-1, keepdim=True))
 
-        return knn_g, heatmap #(heatmap > 0.5).float()
+        return knn_g, heatmap #torch.clamp(heatmap, min=1e-8) (heatmap > 0.5).float()
 
     def __len__(self):
         return self.faces.shape[0]

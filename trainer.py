@@ -121,7 +121,7 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
         scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=config['epochs'], eta_min=1e-8)
         start_epoch = 0
 
-    pos_weight = compute_pos_weight(train_set.heatmaps)
+    #pos_weight = compute_pos_weight(train_set.heatmaps)
     
     #criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(config['device']))
     #criterion = FocalLoss(alpha=0.98, gamma=3)
@@ -130,7 +130,7 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
     for epoch in range(start_epoch, config['epochs']):
         model.train()
         running_loss = 0.0
-        num_iters = len(train_set)
+        #num_iters = len(train_set)
         
         for i in trange(0, len(train_set), config['batch_training_size'],  desc=f"Epoch {epoch+1}/{config['epochs']}"):
             pointclouds, y = train_set[i : i + config['batch_training_size']]
