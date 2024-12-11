@@ -35,7 +35,7 @@ class FocalLoss(nn.Module):
         self.alpha = alpha
         self.gamma = gamma
 
-    def forward(self, inputs, targets):
+    def forward(self, targets, inputs):
 
         pt = targets * torch.sigmoid(inputs) + (1 - targets) * (1 - torch.sigmoid(inputs))
 
@@ -142,8 +142,8 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
             )
 
             loss = criterion(
-                y_hat,
-                y.to(config['device'])
+                y.to(config['device']),
+                y_hat
             )
 
             loss = loss / config['gradient_accumulation_steps']

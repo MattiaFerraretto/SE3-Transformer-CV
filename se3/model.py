@@ -295,7 +295,7 @@ class SE3UnetV2(nn.Module):
                 SE3Transformer(
                     num_layers=2,
                     num_channels=self.hidden_channels,
-                    num_degrees=4,
+                    num_degrees=3,
                     div=1,
                     n_heads=1,
                     si_m=self.si_m,
@@ -315,7 +315,7 @@ class SE3UnetV2(nn.Module):
         bottleneck = SE3Transformer(
             num_layers=2,
             num_channels=self.hidden_channels,
-            num_degrees=4,
+            num_degrees=3,
             div=1,
             n_heads=1,
             si_m=self.si_m,
@@ -336,7 +336,7 @@ class SE3UnetV2(nn.Module):
                 SE3Transformer(
                     num_layers=2,
                     num_channels=self.hidden_channels,
-                    num_degrees=4,
+                    num_degrees=3,
                     div=1,
                     n_heads=1,
                     si_m=self.si_m,
@@ -355,7 +355,7 @@ class SE3UnetV2(nn.Module):
             SE3Transformer(
                 num_layers=2,
                 num_channels=self.hidden_channels,
-                num_degrees=4,
+                num_degrees=3,
                 div=1,
                 n_heads=1,
                 si_m=self.si_m,
