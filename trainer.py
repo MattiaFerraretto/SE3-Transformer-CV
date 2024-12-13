@@ -66,8 +66,8 @@ def eval_loop(model: nn.Module, eval_set: Dataset, criterion: nn.BCEWithLogitsLo
             )
             
             loss = criterion(
-                y_hat,
-                y.to(device)
+                y.to(device),
+                y_hat
             )
             
             total_loss += loss.item()

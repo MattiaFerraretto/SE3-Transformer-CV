@@ -35,6 +35,14 @@ class FaceLandmarkDataset(Dataset):
         self.reduce_pointcloud_to = reduce_pointcloud_to
         
         self.faces, self.landmark_gts, self.heatmaps, self.scales = self.load_face_data()
+
+        if self.reduce_pointcloud_to != 'None':
+            self.faces, self.heatmaps = self._reduce(
+                n_points=self.reduce_pointcloud_to,
+                point_cloud=self.faces,
+                landmarks=self.landmark_gts,
+                sigma=0.095
+            )
             
         # if it is not none, then i want it aligned.
         # However, if I break it with an E(3) transformation, then I need a pre-processing step for the model.
@@ -53,15 +61,7 @@ class FaceLandmarkDataset(Dataset):
             
         elif self.preprocessing == 'spatial_transformer' and self.break_ds_with != 'none':
             self.faces, self.landmark_gts = augmentation(self.faces, self.landmark_gts, transformation=self.break_ds_with)
-            
         
-        if self.reduce_pointcloud_to != 'None':
-            self.faces, self.heatmaps = self._reduce(
-                n_points=self.reduce_pointcloud_to,
-                point_cloud=self.faces,
-                landmarks=self.landmark_gts,
-                sigma=0.095
-            )
 
         print("Preprocessing:", self.preprocessing)
         print("Dataset:", self.ds_name)
@@ -94,20 +94,21 @@ class FaceLandmarkDataset(Dataset):
         if self.ds_name != 'York' and self.ds_name != 'Lafas':
             emotions = dataset['emotion_list']
         scales = dataset['scale_list']
-
-
-       
         
         return torch.tensor(faces,  dtype=torch.float32), torch.tensor(landmark_gts,  dtype=torch.float32), torch.tensor(heatmaps,  dtype=torch.float32), torch.tensor(scales,  dtype=torch.float32)
     
     
     def _reduce(self, n_points: int, point_cloud: torch.tensor,landmarks: torch.tensor, sigma: float=0.08):
-        original_dim = point_cloud.dim()
         if point_cloud.dim() == 2:
             point_cloud = torch.unsqueeze(point_cloud, dim=0)  
             landmarks = torch.unsqueeze(landmarks, dim=0)
 
-        point_idxs = farthest_point_sampler(point_cloud, n_points)
+        
+        centroids = torch.mean(point_cloud, axis=-2)
+        avg_centroids = torch.mean(centroids, axis=0)
+        fp_start_idx = torch.argmin(torch.mean(torch.linalg.norm(point_cloud - avg_centroids[None, None, :], dim=-1), axis=0))
+
+        point_idxs = farthest_point_sampler(point_cloud, n_points, fp_start_idx)
         dim0_index = torch.arange(point_cloud.shape[0]).unsqueeze(-1)
 
         point_cloud = point_cloud[dim0_index, point_idxs]

@@ -5,7 +5,7 @@ test_set:
   ds_path: "./Facescape"
   category: "Neutral"
   references_pointclouds_icp_path: "./Preprocessing/reference_pointclouds_for_icp"
-  reduce_pointcloud_to: 2048
+  reduce_pointcloud_to: 1024
 
 # Define the same configuration used during the training
 model:
@@ -19,7 +19,7 @@ model:
   pooling_ratio: 0.25
   aggr: "sum"
 
-checkpoint_fpath: "./checkpoints/run-42/checkpoint-14-v0.0.42.0.pth"
+checkpoint_fpath: "./checkpoints/run-1.0/checkpoint-1-v0.1.0.0.pth"
 
 hyper:
   batch_size: 2

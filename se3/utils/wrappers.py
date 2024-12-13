@@ -113,10 +113,15 @@ class Pooling3D(nn.Module):
         self.downsampled_points = round(n_points * (1 - self.pooling_ratio))
 
         pos =  G.ndata['x'].view(-1, n_points, self.in_features)
+
+        centroids = torch.mean(pos, axis=-2)
+        avg_centroids = torch.mean(centroids, axis=0)
+        fp_start_idx = torch.argmin(torch.mean(torch.linalg.norm(pos - avg_centroids[None, None, :], dim=-1), axis=0))
         
         fp_idx = farthest_point_sampler(
             pos,
-            self.downsampled_points 
+            self.downsampled_points,
+            fp_start_idx
         )
 
         starting_idx = (torch.arange(pos.size(0), device=device) * n_points).view(-1, 1)
