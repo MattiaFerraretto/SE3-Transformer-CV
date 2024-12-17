@@ -1,6 +1,6 @@
 test_set:
-  preprocessing: "icp"                         #choices=['icp', 'spatial_transformer', 'none']
-  break_ds_with: "rotation_translation"        #choices=['rotation', 'translation', 'rotation_translation', 'none']
+  preprocessing: "none"                         #choices=['icp', 'spatial_transformer', 'none']
+  break_ds_with: "none"        #choices=['rotation', 'translation', 'rotation_translation', 'none']
   split: "Test"
   ds_path: "./Facescape"
   category: "Neutral"
@@ -10,16 +10,16 @@ test_set:
 # Define the same configuration used during the training
 model:
   #name: "SE3Unet"
-  n_layers: 2
+  n_layers: 1
   si_m: "1x1"
   si_e: "att"
   in_features: 3
   hidden_channels: 5  # ref paper 5
   out_features: 68
-  pooling_ratio: 0.25
+  pooling_ratio: 0.35
   aggr: "sum"
 
-checkpoint_fpath: "./checkpoints/run-1.0/checkpoint-1-v0.1.0.0.pth"
+checkpoint_fpath: "./checkpoints/run-1.0/checkpoint-8-v0.2.2.0.pth"
 
 hyper:
   batch_size: 2

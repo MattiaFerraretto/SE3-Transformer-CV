@@ -41,7 +41,7 @@ class FaceLandmarkDataset(Dataset):
                 n_points=self.reduce_pointcloud_to,
                 point_cloud=self.faces,
                 landmarks=self.landmark_gts,
-                sigma=0.095
+                sigma=0.099                  #0.095 -> 0.099 
             )
             
         # if it is not none, then i want it aligned.

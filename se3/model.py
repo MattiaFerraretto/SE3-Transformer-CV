@@ -366,7 +366,8 @@ class SE3UnetV2(nn.Module):
 
         mlp = nn.Sequential(
             nn.Linear(in_features=self.in_features, out_features=self.out_features, bias=False),
-            #nn.ReLU(),
+            #nn.Sigmoid()
+            nn.ReLU(),
             #nn.Linear(in_features=self.out_features, out_features=self.out_features, bias=False),
             #nn.ReLU(),
         )

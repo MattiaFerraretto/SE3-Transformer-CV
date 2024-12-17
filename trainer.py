@@ -53,7 +53,7 @@ def compute_pos_weight(labels: torch.tensor, threshold: float=0.5):
 
 def eval_loop(model: nn.Module, eval_set: Dataset, criterion: nn.BCEWithLogitsLoss, device, features, batch_size):
     model.eval()
-    total_loss = 0.0
+    eval_loss = []
 
     with torch.no_grad():
         for i in trange(0, len(eval_set), batch_size, desc="Evaluating.."):
@@ -70,9 +70,9 @@ def eval_loop(model: nn.Module, eval_set: Dataset, criterion: nn.BCEWithLogitsLo
                 y_hat
             )
             
-            total_loss += loss.item()
+            eval_loss.append(loss.item())
 
-    return total_loss / len(eval_set)
+    return torch.mean(torch.tensor(eval_loss, dtype=torch.float32)).item()
 
 def save_checkpoint(model: nn.Module, optimizer: Adam, scheduler: CosineAnnealingWarmRestarts, epoch: int, val_loss: float, out_dir: str, save_every: int,  save_max: int):
     if (epoch + 1) % save_every != 0:
