@@ -135,8 +135,13 @@ class FaceLandmarkDataset(Dataset):
         knn_g = dgl.knn_graph(face, k=40, algorithm='kd-tree', exclude_self=True)
         
         indices_src, indices_dst = knn_g.edges()
+
+        #centroid = torch.mean(face, dim=1, keepdim=True)
+        #features = face - centroid
  
         face = face.view(-1, 3)
+        #features = features.view(-1, 3)
+
         knn_g.ndata['x'] = torch.unsqueeze(face, dim=1)
         knn_g.ndata['v'] = torch.unsqueeze(face, dim=1)
         knn_g.edata['d'] = face[indices_dst] - face[indices_src]

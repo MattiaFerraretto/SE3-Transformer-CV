@@ -1,6 +1,6 @@
 test_set:
-  preprocessing: "none"                         #choices=['icp', 'spatial_transformer', 'none']
-  break_ds_with: "none"        #choices=['rotation', 'translation', 'rotation_translation', 'none']
+  preprocessing: "spatial_transformer"                         #choices=['icp', 'spatial_transformer', 'none']
+  break_ds_with: "rotation_translation"        #choices=['rotation', 'translation', 'rotation_translation', 'none']
   split: "Test"
   ds_path: "./Facescape"
   category: "Neutral"
@@ -19,7 +19,7 @@ model:
   pooling_ratio: 0.35
   aggr: "sum"
 
-checkpoint_fpath: "./checkpoints/run-1.0/checkpoint-8-v0.2.2.0.pth"
+checkpoint_fpath: "./checkpoints/run-1.0/checkpoint-250-v0.2.2.7.pth"
 
 hyper:
   batch_size: 2
