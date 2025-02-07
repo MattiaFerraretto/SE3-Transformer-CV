@@ -8,16 +8,16 @@ import wandb
 import os
 from tqdm import trange
 
-class AdaptiveWingLoss(nn.Module):
+class AdaptiveWingLossWithLogits(nn.Module):
     def __init__(self, omega=14, theta=0.5, epsilon=1, alpha=2.1):
-        super(AdaptiveWingLoss, self).__init__()
+        super(AdaptiveWingLossWithLogits, self).__init__()
         self.omega = omega
         self.theta = theta
         self.epsilon = epsilon
         self.alpha = alpha
 
     def forward(self, y_true, y_pred):
-        delta_y = torch.abs(y_true - y_pred)
+        delta_y = torch.abs(y_true - torch.sigmoid(y_pred))
         
         loss_non_linear = self.omega * torch.log(1 + (delta_y / self.epsilon) ** (self.alpha - y_true))
         
@@ -62,7 +62,8 @@ def eval_loop(model: nn.Module, eval_set: Dataset, criterion: nn.BCEWithLogitsLo
             y_hat = model(
                 pointclouds.to(device),
                 features,
-                y.shape[0]
+                y.shape[0],
+                logits=True
             )
             
             loss = criterion(
@@ -111,26 +112,25 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
         optimizer = Adam(model.parameters())
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=config['epochs'], eta_min=1e-8, last_epoch=checkpoint['epoch'])
+        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=config['epochs'], eta_min=0, last_epoch=checkpoint['epoch'])
         scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         
         start_epoch = checkpoint['epoch'] + 1
     else:
         #optimizer = SGD(model.parameters(), lr=config['learning_rate'], momentum=0.9)
         optimizer = Adam(model.parameters(), lr=config['learning_rate'])
-        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=config['epochs'], eta_min=1e-8)
+        scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=config['epochs'], eta_min=0)
         start_epoch = 0
 
     #pos_weight = compute_pos_weight(train_set.heatmaps)
     
     #criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(config['device']))
     #criterion = FocalLoss(alpha=0.98, gamma=3)
-    criterion = AdaptiveWingLoss()
+    criterion = AdaptiveWingLossWithLogits()
 
     for epoch in range(start_epoch, config['epochs']):
         model.train()
-        running_loss = 0.0
-        #num_iters = len(train_set)
+        running_loss = []
         
         for i in trange(0, len(train_set), config['batch_training_size'],  desc=f"Epoch {epoch+1}/{config['epochs']}"):
             pointclouds, y = train_set[i : i + config['batch_training_size']]
@@ -138,7 +138,8 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
             y_hat = model(
                 pointclouds.to(config['device']),
                 config['features'],
-                y.shape[0]
+                y.shape[0],
+                logits=True
             )
 
             loss = criterion(
@@ -154,7 +155,7 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
                 optimizer.step()
                 optimizer.zero_grad()
 
-            running_loss += loss.item() * config['gradient_accumulation_steps']
+            running_loss.append(loss.item() * config['gradient_accumulation_steps'])
 
             if i % config['logging_steps'] == 0:
                 wandb.log({
@@ -165,7 +166,7 @@ def train_loop(model: nn.Module, train_set: Dataset, eval_set: Dataset, config):
             optimizer.step()
             optimizer.zero_grad()
 
-        avg_train_loss = running_loss / len(train_set)
+        avg_train_loss = sum(running_loss) / len(running_loss)
 
         val_loss = eval_loop(
             model,

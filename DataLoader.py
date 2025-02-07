@@ -36,13 +36,16 @@ class FaceLandmarkDataset(Dataset):
         
         self.faces, self.landmark_gts, self.heatmaps, self.scales = self.load_face_data()
 
+        # 0.3.0.7 sigma 0.095
         if self.reduce_pointcloud_to != 'None':
             self.faces, self.heatmaps = self._reduce(
                 n_points=self.reduce_pointcloud_to,
                 point_cloud=self.faces,
                 landmarks=self.landmark_gts,
-                sigma=0.099                  #0.095 -> 0.099 
+                sigma=0.095                  #0.095 -> 0.099 
             )
+
+        #self.landmark_gts = self.landmark_gts[:10]
             
         # if it is not none, then i want it aligned.
         # However, if I break it with an E(3) transformation, then I need a pre-processing step for the model.

@@ -19,11 +19,11 @@ def augmentation(faces, landmark_gts, transformation=None):
     landmark_gts_rotated_tensor = torch.zeros(landmark_gts.shape)
     for i in range(faces.shape[0]):
         if transformation == "rotation":
-            faces_new = torch.tensordot(faces[i], rotation_matrix[i])
-            landmark_gts_new = torch.tensordot(landmark_gts[i], rotation_matrix[i])
+            faces_new = torch.tensordot(faces[i], rotation_matrix[i], dims=([1], [0]))
+            landmark_gts_new = torch.tensordot(landmark_gts[i], rotation_matrix[i], dims=([1], [0]))
             # add transformed data
-            faces_rotaed_tensor[i] = torch.tensor(faces_new)
-            landmark_gts_rotated_tensor[i] = torch.tensor(landmark_gts_new)
+            faces_rotaed_tensor[i] = faces_new
+            landmark_gts_rotated_tensor[i] = landmark_gts_new
         if transformation == "translation":
             faces_new = faces[i] + translation_vector[i].repeat(faces[i].shape)
             landmark_gts_new = landmark_gts[i] + translation_vector[i].repeat(landmark_gts[i].shape)

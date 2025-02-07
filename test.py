@@ -1,115 +1,58 @@
 import argparse
 from DataLoader import FaceLandmarkDataset
-from se3.model import SE3Unet
+from se3.model import SE3Unet, SE3UnetV2
 import yaml
 import torch
 from torch import nn
 from torch.utils.data import Dataset
 from tqdm import trange
 import matplotlib.pyplot as plt
+from tabulate import tabulate
+from collections import defaultdict
+import os
 
 parser = argparse.ArgumentParser(description='Test configuration')
 
 parser.add_argument('--config_path', type=str, help='Test configuration file', required=True)
 
+def compute_IoU(y, y_hat, threshold=0.2):
+    intersection = ((y_hat >= threshold) & (y >= threshold)).sum(axis=1)
+    union = ((y_hat >= threshold) | (y >= threshold)).sum(axis=1)
 
-def compute_scores(y, y_hat):
+    return torch.nan_to_num(intersection / union,  nan=0.0)
 
-    thresholds = torch.arange(0, 1, 0.01)
-    #arg_threshold = torch.where(thresholds == 0.5)[0].item()
+def plot_IoUs(thresolds, IoUs, title, save_to):
+    num_subplots = 68
+    rows, cols = 10, 7
 
-    precisions = torch.zeros(y.shape[0], thresholds.shape[0])
-    recalls = torch.zeros(y.shape[0], thresholds.shape[0])
-    f1_scores = torch.zeros(y.shape[0], thresholds.shape[0])
+    plt.style.use("seaborn-v0_8-muted")
 
+    fig, axes = plt.subplots(rows, cols, figsize=(15, 20), constrained_layout=True)
+    axes = axes.flatten()
 
-    for i, threshold in enumerate(thresholds):
-        y_bin_hat = (torch.sigmoid(y_hat) > threshold).float()
-        y_bin_hat = y_bin_hat.to(y.device)
+    for i in range(num_subplots):
+        axes[i].plot(thresolds, IoUs[:, i],linewidth=1.5, color="tab:blue")
+        
+        axes[i].grid(True, linestyle="--", alpha=0.6)
+        axes[i].set_title(f"#{i}", fontsize=8, weight="bold")
+        axes[i].tick_params(axis="both", which="major", labelsize=7)
 
-        #MICRO AGGR APPROACH
-        tp = ((y == 1) & (y_bin_hat == 1)).sum(axis=-2).sum(-1)
-        fn = ((y == 1) & (y_bin_hat == 0)).sum(axis=-2).sum(-1)
-        fp = ((y == 0) & (y_bin_hat == 1)).sum(axis=-2).sum(-1)
-        tn = ((y == 0) & (y_bin_hat == 0)).sum(axis=-2).sum(-1)
+        axes[i].set_xlim(0.1, 1)
+        axes[i].set_ylim(0, 1)
 
-        #MACRO AGGR APPROACH
-        # tp = ((y == 1) & (y_bin_hat == 1)).sum(axis=-2)
-        # fn = ((y == 1) & (y_bin_hat == 0)).sum(axis=-2)
-        # fp = ((y == 0) & (y_bin_hat == 1)).sum(axis=-2)
-        # tn = ((y == 0) & (y_bin_hat == 0)).sum(axis=-2)
+    for i in range(num_subplots, len(axes)):
+        fig.delaxes(axes[i])
+    
+    
+    plt.savefig(os.path.join(save_to, f"{title}.png"), bbox_inches="tight", dpi=300)
+    plt.close()
 
-        precision = tp / (tp + fp)
-        recall = tp / (tp + fn )
-        f1_score = 2 * tp / (2 * tp + fp + fn)
-
-        precisions[:, i] = precision
-        recalls[:, i] = recall
-        f1_scores[:, i] = f1_score
-
-        #MACRO AGGR APPROACH
-        # precisions[:, i] = precision.mean(axis=-1)
-        # recalls[:, i] = recall.mean(axis=-1)
-        # f1_scores[:, i] = f1_score.mean(axis=-1)
-
-    precisions = torch.nan_to_num(precisions)
-    recalls = torch.nan_to_num(recalls)
-    f1_scores = torch.nan_to_num(f1_scores)
-
-    return thresholds, precisions, recalls, f1_scores
-
-def plot_metrics(thresholds, precision, recall, f1_scores, save=True):
-
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(10, 7))
-    plt.style.use('seaborn-v0_8-darkgrid')
-
-    def style_subplot(ax, title):
-        ax.grid(True, linestyle='--', alpha=0.7)
-        ax.set_xlim([0.0, 1.0])
-        ax.set_ylim([0.0, 1.05])
-        ax.set_title(title, fontsize=12, fontweight='bold', pad=15)
-        ax.tick_params(labelsize=10)
-
-    # 1. Precision Curve
-    ax1.plot(thresholds, precision, color='#2E86C1', lw=2)
-    ax1.set_xlabel('Threshold', fontsize=10, fontweight='bold')
-    ax1.set_ylabel('Precision', fontsize=10, fontweight='bold')
-    style_subplot(ax1, 'Precision Curve')
-
-    # 2. Recall Curve
-    ax2.plot(thresholds, recall, color='#27AE60', lw=2)
-    ax2.set_xlabel('Threshold', fontsize=10, fontweight='bold')
-    ax2.set_ylabel('Recall', fontsize=10, fontweight='bold')
-    style_subplot(ax2, 'Recall Curve')
-
-    # 3. F1 Score Curve
-    ax3.plot(thresholds, f1_scores, color='#8E44AD', lw=2)
-    ax3.set_xlabel('Threshold', fontsize=10, fontweight='bold')
-    ax3.set_ylabel('F1 Score', fontsize=10, fontweight='bold')
-    style_subplot(ax3, 'F1 Score Curve')
-
-    # 4. Precision-Recall Curve
-    ax4.plot(recall, precision, color='#E67E22', lw=2)
-
-    ax4.set_xlabel('Recall', fontsize=10, fontweight='bold')
-    ax4.set_ylabel('Precision', fontsize=10, fontweight='bold')
-    style_subplot(ax4, 'Precision-Recall Curve')
-
-    fig.suptitle('Classification Metrics Analysis', fontsize=14, fontweight='bold')
-
-    plt.tight_layout()
-
-    if save:
-        plt.savefig('classification_metrics.png', dpi=300, bbox_inches='tight')
-
-    plt.show()
-
-def test_loop(model: nn.Module, test_set: Dataset, batch_size:int, features: str, device: str):
+def test_loop(model: nn.Module, test_set: Dataset, batch_size:int, features: str, device: str, conf: dict):
     model.eval()
 
-    precisions = []
-    recalls = []
-    f1_scores = []
+    IoUs = []
+    thresolds = torch.arange(0.1, 1, 0.05)
+    IoUs = defaultdict(list)
 
     with torch.no_grad():
         for i in trange(0, len(test_set), batch_size, desc="Testing.."):
@@ -121,17 +64,46 @@ def test_loop(model: nn.Module, test_set: Dataset, batch_size:int, features: str
                 y.shape[0]
             )
 
-            thresholds, precision_per_elem, recall_per_elem, f1_score_per_elem = compute_scores(y, y_hat)
-            
-            precisions.append(precision_per_elem)
-            recalls.append(recall_per_elem)
-            f1_scores.append(f1_score_per_elem)
+            for t in thresolds:
+                IoU = compute_IoU(y, y_hat, t)
+                IoUs[f"{t.item():.2f}"].append(IoU)
 
-    precisions = torch.cat(precisions, axis=0).mean(axis=0)
-    recalls = torch.cat(recalls, axis=0).mean(axis=0)
-    f1_scores = torch.cat(f1_scores, axis=0).mean(axis=0)
 
-    plot_metrics(thresholds, precisions, recalls, f1_scores)
+    avg_IoUs = []
+    for result in IoUs.values():
+        avg_IoUs.append(torch.cat(result, axis=0).mean(axis=0, keepdim=True))
+
+    avg_IoUs = torch.cat(avg_IoUs, axis=0)
+
+    avg_IoU = torch.cat(IoUs["0.20"], axis=0).mean(axis=0)
+    table_result = tabulate([[f"{i}", f"{v:.4f}"] for i, v in enumerate(avg_IoU)], headers=["#", "IoU score"], tablefmt="presto")
+    output = (
+        "# Test results\n\n"
+        f"{table_result}\n\n"
+        f"argmin: {avg_IoU.argmin()}, min: {avg_IoU.min():.4f}\n"
+        f"argmax: {avg_IoU.argmax()}, max: {avg_IoU.max():.4f}\n"
+    )
+
+    os.makedirs(conf['results_dir'], exist_ok=True)
+
+    with open(
+        os.path.join(
+            conf['results_dir'],
+            f"test_{conf['test_set']['preprocessing']}_{conf['test_set']['break_ds_with']}.txt"
+        ),
+        'w'
+    ) as fp:
+        fp.write(output)
+        fp.flush()
+
+    plot_IoUs(
+        thresolds,
+        avg_IoUs,
+        title=f"test_{conf['test_set']['preprocessing']}_{conf['test_set']['break_ds_with']}",
+        save_to=conf['results_dir']
+    )
+
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -140,7 +112,7 @@ if __name__ == "__main__":
         conf = yaml.safe_load(fp)
 
     test_set = FaceLandmarkDataset(**conf['test_set'])
-    model = SE3Unet(**conf['model'])
+    model = SE3UnetV2(**conf['model'])
 
     checkpoint = torch.load(conf['checkpoint_fpath'], map_location='cpu')
 
@@ -152,5 +124,5 @@ if __name__ == "__main__":
 
     model.to(device)
 
-    test_loop(model, test_set, batch_size, features, device)
+    test_loop(model, test_set, batch_size, features, device, conf)
     

@@ -365,18 +365,14 @@ class SE3UnetV2(nn.Module):
         )
 
         mlp = nn.Sequential(
-            #nn.Linear(in_features=self.in_features, out_features=self.out_features, bias=False),
             nn.Linear(in_features=self.in_features, out_features=128, bias=True),
-            #nn.Sigmoid()
             nn.ReLU(),
             nn.Linear(in_features=128, out_features=self.out_features, bias=True),
-            #nn.Linear(in_features=self.out_features, out_features=self.out_features, bias=False),
-            #nn.ReLU(),
         )
         
         return nn.ModuleList(down_branch), bottleneck, nn.ModuleList(up_branch), mlp
     
-    def forward(self, G: dgl.graph, features: str, batch_size: int=1):
+    def forward(self, G: dgl.graph, features: str, batch_size: int=1, logits=False):
         res = []
 
         for i in range(0, self.n_layers*2, 2):
@@ -403,7 +399,6 @@ class SE3UnetV2(nn.Module):
             res_idx = res_idx - 1
 
         x = G.ndata[features].view(-1, G.ndata[features].size(0) // batch_size, self.in_features)
-        return x
         y_hat = self.mlp(x)
 
-        return y_hat
+        return y_hat if logits else torch.sigmoid(y_hat)

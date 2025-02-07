@@ -19,9 +19,12 @@ model:
   pooling_ratio: 0.35
   aggr: "sum"
 
-checkpoint_fpath: "./checkpoints/run-1.0/checkpoint-250-v0.2.2.7.pth"
+#best run 0.3.0.7
+checkpoint_fpath: "./checkpoints/run-37/checkpoint-35-v0.3.0.7.pth"
 
 hyper:
   batch_size: 2
-  device: "cuda"
+  device: "cpu"
   features: "v"
+
+results_dir: ./test_results
