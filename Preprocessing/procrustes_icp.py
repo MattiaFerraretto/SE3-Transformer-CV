@@ -155,7 +155,7 @@ def batch_icp(batch_point_clouds, batch_landmark_gts, reference_point_cloud, ref
 def visualize_pointcloud_heatmap(point_cloud: torch.tensor, heatmap: torch.tensor, landmark_gt: torch.tensor):
 
     # Create a 3D scatter plot of the face point cloud
-    fig = px.scatter_3d(x=point_cloud[:, 0], y=point_cloud[:, 1], z=point_cloud[:, 2], width=1280, height=720)
+    fig = px.scatter_3d(x=point_cloud[:, 0], y=point_cloud[:, 1], z=point_cloud[:, 2], width=880, height=600)
 
     # Set marker properties for the point_cloud point cloud
     fig.update_traces(marker=dict(size=2, color='black'))
@@ -178,7 +178,7 @@ def visualize_pointcloud_heatmap(point_cloud: torch.tensor, heatmap: torch.tenso
         marker=dict(size=5, color='green')
     ))
 
-    fig.update_layout(width=1024, height=1024)
+    fig.update_layout(width=640, height=600)
     # remove bg color
     fig.update_layout(plot_bgcolor='rgba(0,0,0,0)')
 
